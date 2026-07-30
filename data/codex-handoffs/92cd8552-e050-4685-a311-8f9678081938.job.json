@@ -1,0 +1,27 @@
+{
+  "run_id": "92cd8552-e050-4685-a311-8f9678081938",
+  "status": "queued_for_codex",
+  "icp": {
+    "industry": "Land Development, Project Management Tech SaaS",
+    "company_size_band": "11\u201350",
+    "geography": "United States, Texas, Arizona, Florida",
+    "pain_points": [
+      "Multiple tools",
+      "lack of centralized database."
+    ],
+    "target_job_titles": [
+      "VP of Land Development"
+    ],
+    "adjacent_personas": [
+      "Senior Land Development Manager",
+      "Division President",
+      "VP of Acquisitions"
+    ],
+    "notes": "Single-family residential, home builder and land development management. "
+  },
+  "max_accounts": 10,
+  "max_contacts_per_account": 3,
+  "result_schema": "CodexResearchResults",
+  "result_file": "C:\\Users\\garci\\Documents\\GitHub\\prospects\\data\\codex-handoffs\\92cd8552-e050-4685-a311-8f9678081938.results.json",
+  "instructions": "Research public no-login sources only. Every claim needs URL, source type, and supporting excerpt."
+}
