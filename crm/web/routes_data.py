@@ -1,0 +1,295 @@
+"""Routes for getting data in and out: import page, duplicate review,
+ICP settings, board, stats, and the research-brief generator."""
+
+from __future__ import annotations
+
+import json
+from collections import Counter
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Form, Request, UploadFile
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
+
+from .. import config
+from ..backup import backup_now, latest_backup
+from ..inbox import pending_files, sweep_inbox
+from ..ingest import ingest_csv, resolve_dupe
+from ..models import (
+    CLOSED_STATUSES,
+    STATUSES,
+    Company,
+    DupeReview,
+    ImportBatch,
+    Prospect,
+    Setting,
+)
+
+router = APIRouter()
+
+DEFAULT_ICP = {
+    "product": "Project-management SaaS for land development teams",
+    "industry": "Single-family residential land development / homebuilding",
+    "company_size": "11-50",
+    "regions": ["Texas", "Arizona", "Florida", "Georgia", "North Carolina", "Tennessee"],
+    "region_note": "Sun Belt broadly — TX/AZ/FL first, neighbors welcome",
+    "target_titles": ["VP of Land Development"],
+    "adjacent_titles": ["Senior Land Development Manager", "Division President", "VP of Acquisitions"],
+    "account_rule": (
+        "Owner/developers, master developers, and homebuilders only. Exclude engineering, "
+        "surveying, planning, architecture, consulting, and construction-management firms "
+        "even if they employ matching titles."
+    ),
+    "pain_points": ["Multiple tools", "lack of centralized database"],
+    "notes": "Single-family residential, home builder and land development management.",
+}
+
+
+def get_session(request: Request):
+    session = request.app.state.factory()
+    try:
+        yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
+    finally:
+        session.close()
+
+
+def render(request: Request, name: str, **context) -> HTMLResponse:
+    return request.app.state.templates.TemplateResponse(request, name, context)
+
+
+def get_icp(session: Session) -> dict:
+    row = session.get(Setting, "icp")
+    icp = dict(DEFAULT_ICP)
+    if row:
+        icp.update(row.value)
+    return icp
+
+
+def _lines(raw: str) -> list[str]:
+    return [line.strip() for line in raw.replace(",", "\n").splitlines() if line.strip()]
+
+
+# ---- import & duplicate review -------------------------------------------
+
+
+@router.get("/import", response_class=HTMLResponse)
+def import_page(request: Request, session: Session = Depends(get_session)):
+    dupes = list(session.scalars(
+        select(DupeReview)
+        .options(joinedload(DupeReview.existing_prospect).joinedload(Prospect.company))
+        .where(DupeReview.status == "pending")
+        .order_by(DupeReview.created_at)
+    ))
+    batches = list(session.scalars(
+        select(ImportBatch).order_by(ImportBatch.created_at.desc()).limit(15)
+    ))
+    rejects: list[dict] = []
+    if config.REJECTS_PATH.exists():
+        lines = config.REJECTS_PATH.read_text(encoding="utf-8").strip().splitlines()
+        for line in lines[-10:][::-1]:
+            try:
+                rejects.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue
+    return render(
+        request, "import.html",
+        dupes=dupes, batches=batches, rejects=rejects,
+        inbox_files=[p.name for p in pending_files()],
+        inbox_dir=str(config.INBOX_DIR),
+        rejects_path=str(config.REJECTS_PATH),
+    )
+
+
+@router.post("/import/inbox")
+def import_inbox(request: Request, session: Session = Depends(get_session)):
+    summaries = sweep_inbox(session)
+    if not summaries:
+        return RedirectResponse("/import?toast=Inbox+is+empty", status_code=303)
+    created = sum(s.created for s in summaries)
+    parts = [f"{created} new prospect{'s' if created != 1 else ''} imported"]
+    review = sum(s.review for s in summaries)
+    rejected = sum(s.rejected for s in summaries)
+    if review:
+        parts.append(f"{review} need duplicate review")
+    if rejected:
+        parts.append(f"{rejected} rejected")
+    from urllib.parse import quote
+    return RedirectResponse(f"/import?toast={quote(', '.join(parts))}", status_code=303)
+
+
+@router.post("/import/csv")
+async def import_csv_route(request: Request, file: UploadFile, session: Session = Depends(get_session)):
+    content = await file.read()
+    summary = ingest_csv(session, content, filename=file.filename or "upload.csv")
+    from urllib.parse import quote
+    return RedirectResponse(f"/import?toast={quote(summary.one_line())}", status_code=303)
+
+
+@router.post("/dupes/{review_id}")
+def resolve_dupe_route(
+    review_id: int,
+    request: Request,
+    session: Session = Depends(get_session),
+    resolution: str = Form(...),
+):
+    review = session.get(DupeReview, review_id)
+    from urllib.parse import quote
+    if not review:
+        return RedirectResponse("/import?toast=Review+not+found", status_code=303)
+    try:
+        message = resolve_dupe(session, review, resolution)
+    except ValueError as exc:
+        message = str(exc)
+    return RedirectResponse(f"/import?toast={quote(message)}", status_code=303)
+
+
+# ---- settings --------------------------------------------------------------
+
+
+@router.get("/settings", response_class=HTMLResponse)
+def settings_page(request: Request, session: Session = Depends(get_session)):
+    backup = latest_backup()
+    return render(
+        request, "settings.html",
+        icp=get_icp(session),
+        db_path=str(config.DB_PATH),
+        backup_name=backup.name if backup else None,
+        backup_dir=str(config.BACKUP_DIR),
+    )
+
+
+@router.post("/settings/icp")
+def save_icp(
+    request: Request,
+    session: Session = Depends(get_session),
+    product: str = Form(""),
+    industry: str = Form(""),
+    company_size: str = Form(""),
+    regions: str = Form(""),
+    region_note: str = Form(""),
+    target_titles: str = Form(""),
+    adjacent_titles: str = Form(""),
+    account_rule: str = Form(""),
+    pain_points: str = Form(""),
+    notes: str = Form(""),
+):
+    value = {
+        "product": product.strip(),
+        "industry": industry.strip(),
+        "company_size": company_size.strip(),
+        "regions": _lines(regions),
+        "region_note": region_note.strip(),
+        "target_titles": _lines(target_titles),
+        "adjacent_titles": _lines(adjacent_titles),
+        "account_rule": account_rule.strip(),
+        "pain_points": _lines(pain_points),
+        "notes": notes.strip(),
+    }
+    session.merge(Setting(key="icp", value=value))
+    return RedirectResponse("/settings?toast=ICP+saved", status_code=303)
+
+
+@router.post("/settings/backup")
+def backup_route(request: Request):
+    target = backup_now()
+    from urllib.parse import quote
+    return RedirectResponse(f"/settings?toast={quote('Backup written: ' + target.name)}", status_code=303)
+
+
+# ---- board & stats ----------------------------------------------------------
+
+
+@router.get("/board", response_class=HTMLResponse)
+def board(request: Request, session: Session = Depends(get_session)):
+    prospects = list(session.scalars(
+        select(Prospect).join(Prospect.company).options(joinedload(Prospect.company))
+        .order_by(Prospect.priority.desc(), Prospect.icp_score.is_(None), Prospect.icp_score.desc())
+    ))
+    columns = {slug: [] for slug in STATUSES}
+    for p in prospects:
+        columns[p.status].append(p)
+    return render(request, "board.html", columns=columns)
+
+
+@router.get("/stats", response_class=HTMLResponse)
+def stats(request: Request, session: Session = Depends(get_session)):
+    prospects = list(session.scalars(
+        select(Prospect).join(Prospect.company).options(joinedload(Prospect.company))
+    ))
+    by_status = Counter(p.status for p in prospects)
+    by_region = Counter((p.region or p.company.region or "Unknown") for p in prospects)
+    by_source = Counter(p.source for p in prospects)
+    with_phone = sum(1 for p in prospects if p.phone)
+    with_email = sum(1 for p in prospects if p.email)
+    active = sum(1 for p in prospects if p.status not in CLOSED_STATUSES)
+    total = len(prospects)
+    return render(
+        request, "stats.html",
+        total=total, active=active,
+        with_phone=with_phone, with_email=with_email,
+        by_status=[(slug, label, by_status.get(slug, 0)) for slug, label in STATUSES.items()],
+        by_region=by_region.most_common(),
+        by_source=by_source.most_common(),
+        max_status=max(by_status.values(), default=1),
+        max_region=max(by_region.values(), default=1),
+    )
+
+
+# ---- research brief ---------------------------------------------------------
+
+
+@router.get("/brief", response_class=PlainTextResponse)
+def research_brief(request: Request, session: Session = Depends(get_session)):
+    icp = get_icp(session)
+    domains = sorted(
+        d for d in session.scalars(select(Company.domain)) if d and not d.endswith(".example")
+    )
+    return build_brief(icp, domains)
+
+
+def build_brief(icp: dict, known_domains: list[str]) -> str:
+    regions = ", ".join(icp["regions"])
+    titles = "\n".join(f"- {t}" for t in icp["target_titles"])
+    adjacent = "\n".join(f"- {t}" for t in icp["adjacent_titles"])
+    pains = "; ".join(icp["pain_points"])
+    exclusions = "\n".join(f"- {d}" for d in known_domains) or "- (none yet)"
+    return f"""Research 10 new cold-call prospects for me.
+
+WHO I AM SELLING: {icp['product']}.
+
+IDEAL CUSTOMER PROFILE
+- Industry: {icp['industry']}
+- Company size: {icp['company_size']} employees
+- Regions: {regions} ({icp['region_note']})
+- Account rule: {icp['account_rule']}
+- Their pain points: {pains}
+- Context: {icp['notes']}
+
+TARGET TITLES (best first)
+{titles}
+Adjacent titles that also count:
+{adjacent}
+
+RULES
+- Web research through your own browsing/search only. No third-party data
+  APIs (no Apollo, Clearbit, Hunter, etc.), no logins, no paywalled or
+  private sources, no guessing email patterns.
+- Every prospect needs at least one evidence URL from a public page that
+  verifies the person holds that role at that company (official company
+  team page is best). A DIRECT PHONE NUMBER is the single most valuable
+  field — always check the company website, press releases, and public
+  directories for one.
+- Skip these companies I already have (by domain):
+{exclusions}
+
+HOW TO DELIVER
+Follow the deposit instructions in AGENTS.md at the repo root: write one
+JSON file matching schemas/prospect-deposit.schema.json into inbox/, then
+run `python -m crm import --inbox` and confirm the import summary shows
+your records were created (not rejected).
+"""

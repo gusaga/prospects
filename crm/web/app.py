@@ -238,6 +238,12 @@ def create_app() -> FastAPI:
 
     app = FastAPI(title="Prospecting CRM", docs_url=None, redoc_url=None, openapi_url=None)
     app.mount("/static", StaticFiles(directory=WEB_DIR / "static"), name="static")
+    app.state.factory = factory
+    app.state.templates = templates
+
+    from .routes_data import router as data_router
+
+    app.include_router(data_router)
 
     def get_session():
         session = factory()

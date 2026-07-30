@@ -85,6 +85,64 @@
     }
   });
 
+  // ---- kanban drag & drop -------------------------------------------------
+  var dragged = null;
+
+  document.addEventListener("dragstart", function (event) {
+    var card = event.target.closest(".board-card");
+    if (!card) return;
+    dragged = card;
+    card.classList.add("dragging");
+    event.dataTransfer.effectAllowed = "move";
+  });
+
+  document.addEventListener("dragend", function () {
+    if (dragged) dragged.classList.remove("dragging");
+    document.querySelectorAll(".board-cards.dropping").forEach(function (zone) {
+      zone.classList.remove("dropping");
+    });
+  });
+
+  document.addEventListener("dragover", function (event) {
+    var zone = event.target.closest(".board-cards");
+    if (!zone || !dragged) return;
+    event.preventDefault();
+    zone.classList.add("dropping");
+  });
+
+  document.addEventListener("dragleave", function (event) {
+    var zone = event.target.closest(".board-cards");
+    if (zone) zone.classList.remove("dropping");
+  });
+
+  document.addEventListener("drop", function (event) {
+    var zone = event.target.closest(".board-cards");
+    if (!zone || !dragged) return;
+    event.preventDefault();
+    zone.classList.remove("dropping");
+    var newStatus = zone.getAttribute("data-status");
+    var card = dragged;
+    fetch("/api/prospects/" + card.getAttribute("data-id"), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ field: "status", value: newStatus })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          zone.prepend(card);
+          document.querySelectorAll(".board-col").forEach(function (col) {
+            var counter = col.querySelector(".board-col-head .muted");
+            if (counter) counter.textContent = col.querySelectorAll(".board-card").length;
+          });
+          toast("Moved to " + data.display);
+        } else {
+          toast(data.error || "Could not move card", true);
+        }
+      })
+      .catch(function () { toast("Could not reach the app", true); });
+  });
+
   // ---- live search on the prospects list ---------------------------------
   var searchInput = document.getElementById("search");
   var filtersForm = document.getElementById("filters");

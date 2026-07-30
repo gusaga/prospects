@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}ICP & Settings — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>ICP &amp; Settings</h1>
+    <p class="muted">Who you're hunting for. This drives the research brief you hand to the Codex agent.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/brief" target="_blank">📋 Generate research brief</a>
+  </div>
+</div>
+
+<div class="detail-grid" style="grid-template-columns: 1.5fr 1fr;">
+  <form method="post" action="/settings/icp" class="card">
+    <h2>Ideal customer profile</h2>
+    <div class="fieldlist">
+      <label>Selling <input name="product" value="{{ icp.product }}"></label>
+      <label>Industry <input name="industry" value="{{ icp.industry }}"></label>
+      <label>Company size <input name="company_size" value="{{ icp.company_size }}"></label>
+      <label>Regions <textarea name="regions" rows="2" placeholder="One per line or comma-separated">{{ icp.regions | join('\n') }}</textarea></label>
+      <label>Region note <input name="region_note" value="{{ icp.region_note }}"></label>
+      <label>Target titles <textarea name="target_titles" rows="2">{{ icp.target_titles | join('\n') }}</textarea></label>
+      <label>Adjacent titles <textarea name="adjacent_titles" rows="3">{{ icp.adjacent_titles | join('\n') }}</textarea></label>
+      <label>Account rule <textarea name="account_rule" rows="3">{{ icp.account_rule }}</textarea></label>
+      <label>Pain points <textarea name="pain_points" rows="2">{{ icp.pain_points | join('\n') }}</textarea></label>
+      <label>Notes <textarea name="notes" rows="2">{{ icp.notes }}</textarea></label>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary">Save ICP</button>
+    </div>
+  </form>
+
+  <section class="card">
+    <h2>Database</h2>
+    <div class="fieldrow-static"><span class="muted">Location</span><span class="mono small">{{ db_path }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Last backup</span><span class="mono small">{{ backup_name or 'none yet' }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Backups kept in</span><span class="mono small">{{ backup_dir }}</span></div>
+    <form method="post" action="/settings/backup" style="margin-top:.6rem;">
+      <button class="btn">Back up now</button>
+    </form>
+    <p class="muted small" style="margin-top:.8rem;">A backup is also taken automatically once a day when
+    the app starts. To restore one, stop the app and copy the backup file over
+    <span class="mono">data/crm.db</span>.</p>
+
+    <h2>The research loop</h2>
+    <ol class="small" style="padding-left:1.1rem; line-height:1.7;">
+      <li>Edit the ICP here and <strong>Save</strong>.</li>
+      <li>Click <strong>Generate research brief</strong> and paste it into a Codex task on this repo.</li>
+      <li>The agent researches and deposits a JSON file into <span class="mono">inbox/</span>.</li>
+      <li>Records appear on the <a href="/import">Import page</a> — validated, deduped, rejects explained.</li>
+      <li>Queue the good ones and start dialing from <a href="/">Today's calls</a>.</li>
+    </ol>
+  </section>
+</div>
+
+{% endblock %}

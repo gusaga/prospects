@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Board — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Board</h1>
+    <p class="muted">Drag a card to change its status.</p>
+  </div>
+</div>
+
+<div class="board">
+  {% for slug, prospects in columns.items() %}
+  <div class="board-col" data-status="{{ slug }}">
+    <div class="board-col-head">
+      <span class="pill status-{{ slug }}">{{ STATUSES[slug] }}</span>
+      <span class="muted small">{{ prospects|length }}</span>
+    </div>
+    <div class="board-cards" data-status="{{ slug }}">
+      {% for p in prospects %}
+      <div class="board-card" draggable="true" data-id="{{ p.id }}">
+        <a href="/prospects/{{ p.id }}" class="plain"><strong>{{ p.full_name }}</strong></a>
+        <div class="muted small">{{ p.title or '' }}</div>
+        <div class="small">{{ p.company.name }}</div>
+        <div class="board-card-meta">
+          {{ m.score_badge(p) }}
+          {{ m.priority_chip(p) }}
+          {% if p.phone %}<span class="small mono">{{ p.phone }}</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

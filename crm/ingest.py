@@ -99,12 +99,26 @@ class ProspectRecord(BaseModel):
 
 
 class DepositFile(BaseModel):
-    """Versioned envelope the research agent writes into inbox/."""
+    """Versioned envelope the research agent writes into inbox/.
+
+    This strict model is the published contract (schemas/*.json is generated
+    from it). Ingestion itself uses DepositEnvelope below so that one bad
+    record rejects that record, not the whole batch.
+    """
 
     schema_version: Literal[1]
     source: str = Field(default="codex", max_length=16)
     batch_note: str | None = Field(default=None, max_length=1000)
     prospects: list[ProspectRecord] = Field(min_length=1, max_length=500)
+
+
+class DepositEnvelope(BaseModel):
+    """Lenient envelope: records stay raw so they can fail individually."""
+
+    schema_version: Literal[1]
+    source: str = Field(default="codex", max_length=16)
+    batch_note: str | None = Field(default=None, max_length=1000)
+    prospects: list[dict[str, Any]] = Field(min_length=1, max_length=500)
 
 
 @dataclass
@@ -284,7 +298,7 @@ def ingest_deposit_json(session: Session, content: str, *, filename: str) -> Ing
         _reject(summary, content[:2000], f"not valid JSON: {exc}")
         return summary
     try:
-        deposit = DepositFile.model_validate(parsed)
+        deposit = DepositEnvelope.model_validate(parsed)
     except ValidationError as exc:
         summary = IngestSummary(filename=filename, source="codex")
         problems = "; ".join(
@@ -294,10 +308,52 @@ def ingest_deposit_json(session: Session, content: str, *, filename: str) -> Ing
         return summary
     return ingest_records(
         session,
-        [record.model_dump(mode="json") for record in deposit.prospects],
+        deposit.prospects,
         filename=filename,
         source=deposit.source if deposit.source in ("codex", "csv", "manual") else "codex",
     )
+
+
+def resolve_dupe(session: Session, review: DupeReview, resolution: str) -> str:
+    """Apply a human decision to a parked near-duplicate. Returns a message."""
+    if review.status != "pending":
+        return "Already resolved."
+    record = ProspectRecord.model_validate(review.payload)
+    if resolution == "merged":
+        existing = session.get(Prospect, review.existing_prospect_id)
+        if existing is None:
+            review.status, review.resolution = "resolved", "discarded"
+            return "The existing prospect is gone; incoming record discarded."
+        changed = _enrich(session, existing, record)
+        review.status, review.resolution = "resolved", "merged"
+        return "Merged into the existing prospect." + ("" if changed else " (nothing new to add)")
+    if resolution == "kept_both":
+        company = _get_or_create_company(session, record.company)
+        if find_exact_prospect(session, company.id, record.full_name):
+            review.status, review.resolution = "resolved", "discarded"
+            return "An identical prospect already exists; nothing created."
+        prospect = Prospect(
+            company_id=company.id,
+            full_name=record.full_name,
+            name_key=name_key(record.full_name),
+            title=record.title, phone=record.phone, email=record.email,
+            linkedin_url=record.linkedin_url,
+            region=record.region or company.region,
+            icp_score=record.icp_score, icp_rationale=record.icp_rationale,
+            evidence=[link.model_dump() for link in record.evidence],
+            status=record.status, priority=record.priority, notes=record.notes,
+            source="codex",
+        )
+        session.add(prospect)
+        session.flush()
+        session.add(Activity(prospect_id=prospect.id, kind="system",
+                             body="Created from duplicate review (kept both)"))
+        review.status, review.resolution = "resolved", "kept_both"
+        return f"Created {record.full_name} as a separate prospect."
+    if resolution == "discarded":
+        review.status, review.resolution = "resolved", "discarded"
+        return "Incoming record discarded."
+    raise ValueError(f"Unknown resolution {resolution!r}")
 
 
 CSV_COLUMNS = [

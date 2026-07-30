@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "source": "codex",
+  "batch_note": "Example deposit showing every field. Two records: one complete, one minimal.",
+  "prospects": [
+    {
+      "company": {
+        "name": "Hill Country Communities",
+        "domain": "hillcountrycommunities.example",
+        "website": "https://hillcountrycommunities.example",
+        "industry": "Land development",
+        "size_band": "11-50",
+        "region": "Texas"
+      },
+      "full_name": "Jordan Rivera",
+      "title": "VP of Land Development",
+      "phone": "(512) 555-0134",
+      "email": "jrivera@hillcountrycommunities.example",
+      "linkedin_url": "https://www.linkedin.com/in/example-jordan-rivera",
+      "region": "Austin, Texas",
+      "icp_score": 90,
+      "icp_rationale": "Exact target title at an 11-50 person owner/developer building single-family communities in Texas",
+      "evidence": [
+        { "url": "https://hillcountrycommunities.example/team", "note": "team page listing Jordan Rivera as VP of Land Development" },
+        { "url": "https://hillcountrycommunities.example/communities", "note": "shows they own and develop their communities (not a service firm)" }
+      ],
+      "notes": "Company announced two new master-planned communities in 2026."
+    },
+    {
+      "company": { "name": "Bluestem Homes", "domain": "bluestemhomes.example" },
+      "full_name": "Casey Morgan",
+      "title": "Division President",
+      "icp_score": 74,
+      "icp_rationale": "Adjacent title at a Texas homebuilder; size unconfirmed",
+      "evidence": [
+        { "url": "https://bluestemhomes.example/about", "note": "about page names Casey Morgan as Division President" }
+      ]
+    }
+  ]
+}

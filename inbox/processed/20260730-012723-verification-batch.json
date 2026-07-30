@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "source": "codex",
+  "batch_note": "End-to-end verification batch: 1 good record, 1 near-duplicate of a seeded prospect, 1 invalid record.",
+  "prospects": [
+    {
+      "company": { "name": "Verification Test Homes", "domain": "verification-test.example", "region": "Texas", "industry": "Land development", "size_band": "11-50" },
+      "full_name": "Vera Verify",
+      "title": "VP of Land Development",
+      "phone": "(512) 555-0190",
+      "icp_score": 88,
+      "icp_rationale": "Verification record — exact target title",
+      "evidence": [{ "url": "https://verification-test.example/team", "note": "team page" }]
+    },
+    {
+      "company": { "name": "Sunrise Example Communities", "domain": "sunrise-communities.example" },
+      "full_name": "Peter Prototype",
+      "title": "VP of Land Development",
+      "icp_score": 80,
+      "icp_rationale": "Should be flagged as near-duplicate of seeded Pete Prototype",
+      "evidence": [{ "url": "https://sunrise-communities.example/team" }]
+    },
+    {
+      "company": { "name": "Broken Record Inc" },
+      "full_name": "B",
+      "email": "not-an-email",
+      "icp_score": 300,
+      "evidence": [{ "url": "ftp://bad-protocol.example" }]
+    }
+  ]
+}

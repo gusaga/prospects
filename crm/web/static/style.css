@@ -234,6 +234,35 @@ input[data-autosave].save-error, textarea[data-autosave].save-error { border-col
   background: var(--surface); border: 1px dashed var(--line); border-radius: var(--radius);
   padding: 2.2rem; text-align: center; margin-top: 1rem;
 }
+/* ---- kanban board ---- */
+.board { display: flex; gap: .7rem; overflow-x: auto; align-items: flex-start; padding-bottom: 1rem; }
+.board-col {
+  flex: 0 0 220px; background: #f0f1f5; border-radius: var(--radius);
+  padding: .5rem; min-height: 220px;
+}
+.board-col-head { display: flex; justify-content: space-between; align-items: center; padding: .1rem .2rem .45rem; }
+.board-cards { display: flex; flex-direction: column; gap: .45rem; min-height: 140px; }
+.board-card {
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  padding: .55rem .65rem; font-size: .82rem; box-shadow: var(--shadow); cursor: grab;
+}
+.board-card:active { cursor: grabbing; }
+.board-card.dragging { opacity: .45; }
+.board-cards.dropping { outline: 2px dashed var(--accent); outline-offset: 2px; border-radius: 8px; }
+.board-card-meta { display: flex; gap: .4rem; align-items: center; margin-top: .3rem; flex-wrap: wrap; }
+
+/* ---- stats ---- */
+.stat-row { display: grid; grid-template-columns: 10em 1fr 2.5em; gap: .6rem; align-items: center; padding: .22rem 0; font-size: .84rem; }
+.stat-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stat-bar-track { background: #f0f1f5; border-radius: 99px; height: .8rem; overflow: hidden; }
+.stat-bar { height: 100%; border-radius: 99px; min-width: 2px; background: var(--accent); opacity: .75; }
+.stat-bar-region { background: var(--good); }
+.stat-count { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---- dupe review ---- */
+.dupe-card { border: 1px solid var(--line); border-radius: 8px; padding: .7rem; margin-bottom: .7rem; background: #fbfbfd; }
+.dupe-cols { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+
 .toast {
   position: fixed; bottom: 1.2rem; left: 50%; transform: translateX(-50%);
   background: var(--ink); color: #fff; font-size: .85rem; font-weight: 600;

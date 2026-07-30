@@ -125,6 +125,16 @@ def test_deposit_envelope_validation(session):
     assert summary.rejected == 1
 
 
+def test_one_bad_record_does_not_poison_the_batch(session):
+    mixed = json.dumps({
+        "schema_version": 1,
+        "prospects": [record(), record(full_name="X", company={"name": "Broken Inc"},
+                                       icp_score=999)],
+    })
+    summary = ingest_deposit_json(session, mixed, filename="mixed.json")
+    assert summary.created == 1 and summary.rejected == 1
+
+
 def test_csv_round_trip(session):
     csv_text = (
         "company,company_domain,full_name,title,phone,email,linkedin_url,region,industry,"
