@@ -13,3 +13,5 @@ debug.db
 *.egg-info/
 backups/
 .cache/
+inbox/
+data/rejects.jsonl
