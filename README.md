@@ -1,90 +1,96 @@
-# Evidence-Backed Local Prospecting Engine
+# Prospecting CRM
 
-Local Streamlit application for public-web account and prospect research. Its default **Codex handoff mode** uses your signed-in Codex agent as the human-triggered worker—no LLM API key required. Optional API mode uses `browser-use` with an OpenAI-compatible LLM. Results stay in SQLite and only human-approved prospects are exported.
+A local, single-user cold-call prospecting CRM. Everything runs and stays on
+this machine: no cloud, no accounts, no APIs, no telemetry. Research is done
+by an external LLM agent (Codex) with its own web browsing, which deposits
+prospect records as JSON files — see [AGENTS.md](AGENTS.md).
 
-## What it does
-
-- Captures a structured Ideal Customer Profile (ICP) in Streamlit.
-- Runs three bounded browser agents: account discovery, contact discovery, and public rapport/trigger research.
-- Keeps field-level evidence: source URL, source type, excerpt, extraction time, fingerprint, and freshness state.
-- Scores evidence transparently; scores above `0.85` require an official company source and independent corroboration.
-- Maps a public buying committee, tracks account signals, captures review feedback, excludes suppressions, and exports only approved prospects.
-- Provides a stale-evidence refresh script that flags changed pages instead of overwriting evidence.
-- Treats the configured account and qualified-prospect counts as delivery targets. A partial run is labeled `completed_with_shortfall`, with reasons and a deduplicated gap-fill job.
-
-## Local setup
-
-1. Install Python 3.11+ and create a virtual environment.
-
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\Activate.ps1
-   python -m pip install -e ".[dev]"
-   browser-use install
-   ```
-
-2. Create `.env` from `.env.example`.
-
-   ```powershell
-   Copy-Item .env.example .env
-   ```
-
-   Leave `RESEARCH_MODE=codex_handoff` to use Codex with your existing ChatGPT subscription. The default database is the local `data/prospects.db` file. Set `RESEARCH_MODE=api` plus `LLM_MODEL`, `LLM_API_KEY`, and `LLM_BASE_URL` only if you later want direct API execution.
-
-3. Start the UI.
-
-   ```powershell
-   streamlit run app.py
-   ```
-
-`BROWSER_HEADLESS=false` opens a local Chromium window while agents work. Agents use temporary browser profiles and public no-login pages only. The application automatically keeps Browser Use and its browser harness state under `data/browser-use/` rather than your existing Chrome profile.
-
-## Codex handoff mode (no API key)
-
-1. In Streamlit, save an ICP and select **Queue research for Codex**. The app creates a local run and a job file under `data/codex-handoffs/`.
-2. In a Codex task opened on this workspace, send the displayed prompt, or: `Use $prospecting-codex-worker to process queued prospecting run <run-id>.`
-3. The Codex worker researches public no-login pages, writes a validated JSON result file, and uses the local ingestion command to persist it through the normal scoring/evidence pipeline.
-
-The Codex subscription remains a human-triggered agent workflow; Streamlit cannot invoke the subscription as a background API. OpenAI's ChatGPT and API billing are separate. [OpenAI billing guidance](https://help.openai.com/en/articles/9039756-billing-settings-in-chatgpt-vs-platform)
-
-## Operations
-
-Run the high-confidence query for a completed run:
+## Run it
 
 ```powershell
-python scripts/query_high_confidence.py --run-id <run-uuid>
+.venv\Scripts\python.exe -m crm
 ```
 
-Inspect, validate, or ingest a Codex handoff manually:
+or double-click **run.bat**. Either starts the app at
+<http://127.0.0.1:8765> and opens your browser. `Ctrl+C` in the terminal
+stops it.
+
+## First-time setup (new machine only)
 
 ```powershell
-python scripts/codex_handoff.py list
-python scripts/codex_handoff.py show --run-id <run-uuid>
-python scripts/codex_handoff.py validate --run-id <run-uuid>
-python scripts/codex_handoff.py ingest --run-id <run-uuid>
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e ".[dev]"
+.venv\Scripts\python.exe -m crm migrate   # only if data/prospects.db (legacy) exists
+.venv\Scripts\python.exe -m crm seed      # optional: 25 fake prospects to play with
 ```
 
-Recalculate an existing completed run after an alignment-rule update, without re-researching sources:
+Python 3.11+ required. The database is a single file, `data/crm.db`.
+
+## The daily loop
+
+1. **Today's calls** (the home page) shows everything due plus the queue,
+   sorted by priority. Log outcomes with one click: *No answer* schedules a
+   retry automatically; *Conversation* stamps the contact.
+2. **Prospects** is the full list — search with `/`, filter by status,
+   region, priority, or score, sort any column, export the current view to
+   CSV. Click a row to open the detail page; every field edits inline and
+   saves automatically.
+3. **Import** is where research lands. Deposits from the Codex agent are
+   validated, deduped, and summarized; near-duplicates wait for your
+   merge/keep/discard decision; rejected records are explained in
+   `data/rejects.jsonl`.
+4. **ICP & Settings** holds your ideal customer profile. *Generate research
+   brief* turns it into a ready-to-paste prompt for the Codex agent,
+   including a do-not-research list of companies you already have.
+
+## Getting research done
+
+Open this repo in a Codex task, paste the generated brief (or just point it
+at `AGENTS.md`), and let it research. It writes a JSON file into `inbox/`
+and runs `python -m crm import --inbox`. New prospects appear in the app —
+nothing else to wire up.
+
+## CLI reference
+
+```text
+python -m crm                 start the app (and open the browser)
+python -m crm serve --port N  start on a different port
+python -m crm import FILE     import one deposit JSON file
+python -m crm import --inbox  import everything waiting in inbox/
+python -m crm status          row counts and pending work
+python -m crm seed [--wipe]   add / remove the 25 fake sample prospects
+python -m crm backup          back up the database now
+python -m crm migrate         one-time import of the legacy prospects.db
+```
+
+## Backup & restore
+
+- A backup is written automatically to `backups/` once a day when the app
+  starts (14 most recent are kept). `python -m crm backup` forces one.
+- **Restore:** stop the app, copy the chosen `backups/crm-*.db` over
+  `data/crm.db`, start the app.
+- The pre-rebuild system (Streamlit app and its database) is preserved
+  twice: the code at git tag `codex-final`, the data untouched at
+  `data/prospects.db` plus a copy in `backups/`.
+
+## Tests
 
 ```powershell
-python scripts/rescore_runs.py --run-id <run-uuid>
+.venv\Scripts\python.exe -m pytest -q
 ```
 
-Refresh stale public evidence (appropriate for a local scheduled task):
+## Layout
 
-```powershell
-python scripts/refresh_stale.py --limit 100
+```text
+crm/              the application
+  models.py       SQLite schema (companies, prospects, activities, …)
+  ingest.py       deposit pipeline: validate -> dedupe -> create/enrich/park/reject
+  dedupe.py       normalization + duplicate rules
+  web/            FastAPI app, Jinja templates, hand-written CSS/JS
+  migrate_legacy.py, seed.py, backup.py, inbox.py, __main__.py
+schemas/          versioned deposit contract + example file
+inbox/            where the research agent drops JSON deposits
+data/             crm.db (live), prospects.db (legacy, read-only)
+backups/          timestamped database copies
+AGENTS.md         instructions for the Codex research agent
 ```
-
-Run the test suite without live browser or model credentials:
-
-```powershell
-python -m pytest -q
-```
-
-## Boundaries
-
-- No Hunter, Apollo, Clearbit, data brokers, or third-party B2B data APIs.
-- No logins, CAPTCHA/paywall bypassing, private-data collection, or inferred email patterns.
-- No autonomous emails, social messages, calendar requests, or CRM write-backs.
-- CSV/JSON import and export are provided as the v1 handoff boundary.
