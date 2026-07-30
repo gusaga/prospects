@@ -11,3 +11,5 @@ data/browser-use/
 exports/
 debug.db
 *.egg-info/
+backups/
+.cache/
