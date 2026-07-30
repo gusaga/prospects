@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Prospecting CRM{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📞</text></svg>">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">📞 <span>Prospecting CRM</span></a>
+    <nav>
+      <a href="/" class="{{ 'active' if request.url.path == '/' }}">Today's calls</a>
+      <a href="/prospects" class="{{ 'active' if request.url.path.startswith('/prospects') }}">Prospects</a>
+      <a href="/board" class="{{ 'active' if request.url.path.startswith('/board') }}">Board</a>
+      <a href="/import" class="{{ 'active' if request.url.path.startswith('/import') }}">Import</a>
+      <a href="/stats" class="{{ 'active' if request.url.path.startswith('/stats') }}">Stats</a>
+      <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') }}">ICP &amp; Settings</a>
+    </nav>
+    <a class="btn btn-primary" href="/prospects/new">+ Add prospect</a>
+  </header>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  {% if request.query_params.get('toast') %}
+  <script>window.__initialToast = {{ request.query_params.get('toast') | tojson }};</script>
+  {% endif %}
+  <script src="/static/app.js"></script>
+</body>
+</html>

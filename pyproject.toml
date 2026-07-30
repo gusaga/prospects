@@ -1,35 +1,29 @@
 [project]
-name = "evidence-backed-prospecting"
-version = "0.1.0"
-description = "Local, evidence-backed web prospecting with Streamlit, browser-use, and SQLite."
+name = "prospects-crm"
+version = "1.0.0"
+description = "Local, single-user cold-call prospecting CRM. Research is deposited by an external LLM agent as JSON; no APIs, no cloud."
 requires-python = ">=3.11"
 dependencies = [
-    "browser-use>=0.7,<1.0",
-    "httpx>=0.28,<1.0",
+    "fastapi>=0.115,<1.0",
+    "uvicorn>=0.30,<1.0",
+    "jinja2>=3.1,<4.0",
+    "python-multipart>=0.0.9,<1.0",
     "pydantic>=2.10,<3.0",
-    "pydantic-settings>=2.7,<3.0",
-    "python-dotenv>=1.0,<2.0",
     "sqlalchemy>=2.0,<3.0",
-    "streamlit>=1.41,<2.0",
-    "tldextract>=5.1,<6.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3,<9.0", "pytest-asyncio>=0.25,<1.0"]
+dev = ["pytest>=8.3,<9.0", "httpx>=0.28,<1.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-include = ["prospecting*"]
-exclude = ["tests*", "data*", "exports*"]
-
-[dependency-groups]
-dev = ["pytest>=8.3,<9.0", "pytest-asyncio>=0.25,<1.0"]
+include = ["crm*"]
+exclude = ["tests*", "data*", "backups*", "inbox*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
-asyncio_mode = "auto"
 cache_dir = ".cache/pytest"

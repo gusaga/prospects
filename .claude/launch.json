@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "streamlit",
+      "name": "crm",
       "runtimeExecutable": ".venv\\Scripts\\python.exe",
-      "runtimeArgs": ["-m", "streamlit", "run", "app.py", "--server.headless", "true", "--server.port", "8501"],
-      "port": 8501
+      "runtimeArgs": ["-m", "crm", "serve", "--port", "8765"],
+      "port": 8765
     }
   ]
 }

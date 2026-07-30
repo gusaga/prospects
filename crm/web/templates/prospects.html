@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Prospects — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Prospects</h1>
+    <p class="muted"><span id="result-count">{{ count }}</span> shown</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/export.csv?{{ query_string }}">⬇ Export this view (CSV)</a>
+  </div>
+</div>
+
+<form id="filters" class="filters" method="get" action="/prospects">
+  <input type="search" name="q" id="search" placeholder="Search name, company, title, notes…  ( / )"
+         value="{{ f.q }}" autocomplete="off">
+  <select name="status">
+    <option value="">Any status</option>
+    {% for slug, label in STATUSES.items() %}
+    <option value="{{ slug }}" {{ 'selected' if f.status == slug }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="region">
+    <option value="">Any region</option>
+    {% for r in regions %}
+    <option value="{{ r }}" {{ 'selected' if f.region == r }}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <select name="priority">
+    <option value="">Any priority</option>
+    {% for value, label in PRIORITIES.items() %}
+    <option value="{{ value }}" {{ 'selected' if f.priority == value|string }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="min_score">
+    <option value="">Any score</option>
+    {% for threshold in [80, 60, 40] %}
+    <option value="{{ threshold }}" {{ 'selected' if f.min_score == threshold|string }}>≥ {{ threshold }}</option>
+    {% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="due" value="1" {{ 'checked' if f.due }}> Due only</label>
+  <input type="hidden" name="sort" value="{{ f.sort }}">
+  <input type="hidden" name="dir" value="{{ f.dir }}">
+  <button class="btn">Filter</button>
+  {% if f.q or f.status or f.region or f.priority or f.min_score or f.due %}
+  <a class="btn btn-ghost" href="/prospects">Clear</a>
+  {% endif %}
+</form>
+
+<div id="results">
+  {% include "_table.html" %}
+</div>
+
+{% endblock %}

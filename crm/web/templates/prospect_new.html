@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Add prospect — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <div class="breadcrumb"><a href="/prospects">Prospects</a> /</div>
+    <h1>Add a prospect</h1>
+    <p class="muted">Duplicates are detected automatically — same person at the same company is skipped,
+       near-matches go to the review queue.</p>
+  </div>
+</div>
+
+<form method="post" action="/prospects/new" class="card form-card">
+  <div class="form-grid">
+    <label>Full name * <input name="full_name" required autofocus placeholder="Jane Doe"></label>
+    <label>Title <input name="title" placeholder="VP of Land Development"></label>
+    <label>Company * <input name="company_name" required list="company-list" placeholder="Acme Communities"></label>
+    <datalist id="company-list">
+      {% for c in companies %}<option value="{{ c.name }}">{% endfor %}
+    </datalist>
+    <label>Company domain <input name="company_domain" placeholder="acme.com (used for dedupe)"></label>
+    <label>Phone <input name="phone" placeholder="(512) 555-0100"></label>
+    <label>Email <input name="email" type="email" placeholder="jane@acme.com"></label>
+    <label>LinkedIn <input name="linkedin_url" placeholder="https://linkedin.com/in/…"></label>
+    <label>Region <input name="region" placeholder="Texas"></label>
+    <label>ICP score (0–100) <input name="icp_score" type="number" min="0" max="100"></label>
+    <label>Priority
+      <select name="priority">
+        {% for value, label in PRIORITIES.items() %}
+        <option value="{{ value }}" {{ 'selected' if value == 2 }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for slug, label in STATUSES.items() %}
+        <option value="{{ slug }}" {{ 'selected' if slug == 'new' }}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="span2">Why they fit <input name="icp_rationale" placeholder="One line on ICP fit"></label>
+    <label class="span2">Notes <textarea name="notes" rows="3"></textarea></label>
+  </div>
+  <div class="form-actions">
+    <button class="btn btn-primary">Add prospect</button>
+    <a class="btn btn-ghost" href="/prospects">Cancel</a>
+  </div>
+</form>
+
+{% endblock %}

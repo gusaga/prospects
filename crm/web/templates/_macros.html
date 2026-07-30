@@ -1,0 +1,44 @@
+{% macro status_pill(p) -%}
+<span class="pill status-{{ p.status }}">{{ STATUSES.get(p.status, p.status) }}</span>
+{%- endmacro %}
+
+{% macro priority_chip(p) -%}
+<span class="chip prio-{{ p.priority }}" title="Priority">{{ PRIORITIES.get(p.priority, p.priority) }}</span>
+{%- endmacro %}
+
+{% macro score_badge(p) -%}
+{% if p.icp_score is not none %}
+<span class="score {{ 'score-hi' if p.icp_score >= 80 else ('score-mid' if p.icp_score >= 60 else 'score-lo') }}"
+      title="{{ p.icp_rationale or 'ICP fit score' }}">{{ p.icp_score }}</span>
+{% else %}<span class="score score-none">–</span>{% endif %}
+{%- endmacro %}
+
+{% macro copy_btn(value, kind) -%}
+{% if value %}
+<button type="button" class="icon-btn copy" data-copy="{{ value }}" title="Copy {{ kind }}">⧉</button>
+{% endif %}
+{%- endmacro %}
+
+{% macro quick_actions(p) -%}
+<form method="post" action="/prospects/{{ p.id }}/action" class="quick-actions">
+  <button name="action" value="no_answer" class="btn btn-sm" title="Log call: no answer (schedules a retry)">✗ No answer</button>
+  <button name="action" value="conversation" class="btn btn-sm btn-good" title="Log call: had a conversation">✓ Conversation</button>
+</form>
+{%- endmacro %}
+
+{% macro phone_cell(p) -%}
+{% if p.phone %}<span class="mono">{{ p.phone }}</span> {{ copy_btn(p.phone, 'phone') }}
+{% else %}<span class="muted">no phone</span>{% endif %}
+{%- endmacro %}
+
+{% macro email_cell(p) -%}
+{% if p.email %}<span class="mono email-trim" title="{{ p.email }}">{{ p.email }}</span> {{ copy_btn(p.email, 'email') }}
+{% else %}<span class="muted">–</span>{% endif %}
+{%- endmacro %}
+
+{% macro sort_link(key, label, f) -%}
+{% set next_dir = 'asc' if f.sort == key and f.dir == 'desc' else 'desc' %}
+{% set arrow = (' ▾' if f.dir == 'desc' else ' ▴') if f.sort == key else '' %}
+<a class="sort {{ 'sorted' if f.sort == key }}"
+   href="?q={{ f.q|urlencode }}&status={{ f.status }}&region={{ f.region|urlencode }}&priority={{ f.priority }}&min_score={{ f.min_score }}&due={{ f.due }}&sort={{ key }}&dir={{ next_dir }}">{{ label }}{{ arrow }}</a>
+{%- endmacro %}

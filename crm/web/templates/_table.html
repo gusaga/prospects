@@ -1,0 +1,35 @@
+{% import "_macros.html" as m %}
+<div class="table-wrap">
+<table class="data">
+  <thead>
+    <tr>
+      <th>{{ m.sort_link('name', 'Who', f) }}</th>
+      <th>{{ m.sort_link('company', 'Company', f) }}</th>
+      <th>Phone</th>
+      <th>Email</th>
+      <th>{{ m.sort_link('score', 'Score', f) }}</th>
+      <th>{{ m.sort_link('priority', 'Priority', f) }}</th>
+      <th>{{ m.sort_link('status', 'Status', f) }}</th>
+      <th>{{ m.sort_link('followup', 'Follow-up', f) }}</th>
+      <th>{{ m.sort_link('added', 'Added', f) }}</th>
+    </tr>
+  </thead>
+  <tbody data-count="{{ count }}">
+  {% for p in prospects %}
+    <tr class="rowlink" data-href="/prospects/{{ p.id }}">
+      <td><a class="plain" href="/prospects/{{ p.id }}"><strong>{{ p.full_name }}</strong></a><br><span class="muted small">{{ p.title or '' }}</span></td>
+      <td>{{ p.company.name }}<br><span class="muted small">{{ p | region_of }}</span></td>
+      <td>{{ m.phone_cell(p) }}</td>
+      <td>{{ m.email_cell(p) }}</td>
+      <td>{{ m.score_badge(p) }}</td>
+      <td>{{ m.priority_chip(p) }}</td>
+      <td>{{ m.status_pill(p) }}</td>
+      <td>{% if p.next_followup_on %}<span class="due {{ p.next_followup_on | due_class }}">{{ p.next_followup_on | due_label }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td><span class="muted small">{{ p.created_at | fmt_date }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="empty-cell">No prospects match. <a href="/prospects">Clear filters</a> or <a href="/import">import research</a>.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>

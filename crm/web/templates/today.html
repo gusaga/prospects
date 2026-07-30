@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Today's calls — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Today's calls</h1>
+    <p class="muted">{{ due|length }} due follow-up{{ '' if due|length == 1 else 's' }} ·
+       {{ queued|length }} in the queue ·
+       {{ called_today }} call{{ '' if called_today == 1 else 's' }} logged today</p>
+  </div>
+</div>
+
+{% if not due and not queued %}
+<div class="empty-state">
+  <p><strong>Nothing to call right now.</strong></p>
+  <p class="muted">Queue prospects from the <a href="/prospects">list</a>, or import fresh research on the
+  <a href="/import">Import page</a>.</p>
+</div>
+{% endif %}
+
+{% if due %}
+<h2 class="section-title">Due follow-ups</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead>
+    <tr><th>Due</th><th>Who</th><th>Company</th><th>Phone</th><th>Score</th><th>Priority</th><th>Status</th><th class="actions-col">Log a call</th></tr>
+  </thead>
+  <tbody>
+  {% for p in due %}
+    <tr class="rowlink" data-href="/prospects/{{ p.id }}">
+      <td><span class="due {{ p.next_followup_on | due_class }}">{{ p.next_followup_on | due_label }}</span></td>
+      <td><a class="plain" href="/prospects/{{ p.id }}"><strong>{{ p.full_name }}</strong></a><br><span class="muted small">{{ p.title or '' }}</span></td>
+      <td>{{ p.company.name }}<br><span class="muted small">{{ p | region_of }}</span></td>
+      <td>{{ m.phone_cell(p) }}</td>
+      <td>{{ m.score_badge(p) }}</td>
+      <td>{{ m.priority_chip(p) }}</td>
+      <td>{{ m.status_pill(p) }}</td>
+      <td>{{ m.quick_actions(p) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% if queued %}
+<h2 class="section-title">Call queue</h2>
+<div class="table-wrap">
+<table class="data">
+  <thead>
+    <tr><th>Who</th><th>Company</th><th>Phone</th><th>Email</th><th>Score</th><th>Priority</th><th class="actions-col">Log a call</th></tr>
+  </thead>
+  <tbody>
+  {% for p in queued %}
+    <tr class="rowlink" data-href="/prospects/{{ p.id }}">
+      <td><a class="plain" href="/prospects/{{ p.id }}"><strong>{{ p.full_name }}</strong></a><br><span class="muted small">{{ p.title or '' }}</span></td>
+      <td>{{ p.company.name }}<br><span class="muted small">{{ p | region_of }}</span></td>
+      <td>{{ m.phone_cell(p) }}</td>
+      <td>{{ m.email_cell(p) }}</td>
+      <td>{{ m.score_badge(p) }}</td>
+      <td>{{ m.priority_chip(p) }}</td>
+      <td>{{ m.quick_actions(p) }}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endif %}
+
+{% endblock %}
