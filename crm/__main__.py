@@ -2,6 +2,7 @@
 
   serve      start the CRM at http://127.0.0.1:8765 (default command)
   import     deposit a prospects JSON file, or --inbox to sweep inbox/
+  validate   dry-run a deposit file: report what import WOULD do, write nothing
   migrate    one-time copy of the legacy prospects.db into the new schema
   seed       add 25 clearly-fake sample prospects (--wipe removes them)
   status     row counts and pending-work summary
@@ -70,6 +71,33 @@ def cmd_import(args: argparse.Namespace) -> int:
     if summary.rejected:
         print(f"Rejected records are explained in {config.REJECTS_PATH}")
         return 2 if summary.created == 0 else 0
+    return 0
+
+
+def cmd_validate(args: argparse.Namespace) -> int:
+    from .ingest import dry_run_deposit
+
+    path = Path(args.file)
+    if not path.exists():
+        print(f"No such file: {path}", file=sys.stderr)
+        return 1
+    factory = _factory()
+    with session_scope(factory) as session:
+        results = dry_run_deposit(session, path.read_text(encoding="utf-8"))
+    invalid = 0
+    for number, outcome, detail in results:
+        prefix = f"record {number}" if number else "file"
+        print(f"{prefix:>10}  {outcome:<20} {detail}")
+        if outcome in ("invalid", "envelope-invalid"):
+            invalid += 1
+    counts = {}
+    for _, outcome, _ in results:
+        counts[outcome] = counts.get(outcome, 0) + 1
+    print("summary:", ", ".join(f"{v} {k}" for k, v in counts.items()) or "empty file")
+    if invalid:
+        print("Fix the invalid records before importing.", file=sys.stderr)
+        return 2
+    print("Looks good — deposit with: python -m crm import --inbox")
     return 0
 
 
@@ -143,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     imp.add_argument("file", nargs="?", help="path to a deposit .json file")
     imp.add_argument("--inbox", action="store_true", help="import every .json waiting in inbox/")
 
+    validate = sub.add_parser("validate", help="dry-run a deposit file without importing")
+    validate.add_argument("file", help="path to a deposit .json file")
+
     sub.add_parser("migrate", help="one-time import of the legacy database")
 
     seed = sub.add_parser("seed", help="add clearly-fake sample data")
@@ -159,8 +190,9 @@ def main(argv: list[str] | None = None) -> int:
         imp.error("give a file path or --inbox")
 
     handlers = {
-        "serve": cmd_serve, "import": cmd_import, "migrate": cmd_migrate,
-        "seed": cmd_seed, "status": cmd_status, "backup": cmd_backup,
+        "serve": cmd_serve, "import": cmd_import, "validate": cmd_validate,
+        "migrate": cmd_migrate, "seed": cmd_seed, "status": cmd_status,
+        "backup": cmd_backup,
     }
     return handlers[args.command](args)
 

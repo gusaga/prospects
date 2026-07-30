@@ -26,7 +26,7 @@ from .dedupe import (
     name_key,
     normalize_domain,
 )
-from .models import STATUSES, Activity, Company, DupeReview, ImportBatch, Prospect
+from .models import STATUSES, Activity, Company, DupeReview, ImportBatch, Prospect, ResearchRequest
 
 SCHEMA_VERSION = 1
 
@@ -109,6 +109,8 @@ class DepositFile(BaseModel):
     schema_version: Literal[1]
     source: str = Field(default="codex", max_length=16)
     batch_note: str | None = Field(default=None, max_length=1000)
+    request_id: int | None = Field(default=None, ge=1)
+    shortfall_reasons: list[str] = Field(default_factory=list, max_length=30)
     prospects: list[ProspectRecord] = Field(min_length=1, max_length=500)
 
 
@@ -118,6 +120,8 @@ class DepositEnvelope(BaseModel):
     schema_version: Literal[1]
     source: str = Field(default="codex", max_length=16)
     batch_note: str | None = Field(default=None, max_length=1000)
+    request_id: int | None = Field(default=None, ge=1)
+    shortfall_reasons: list[str] = Field(default_factory=list, max_length=30)
     prospects: list[dict[str, Any]] = Field(min_length=1, max_length=500)
 
 
@@ -211,10 +215,11 @@ def ingest_records(
     *,
     filename: str,
     source: str,
+    request_id: int | None = None,
 ) -> IngestSummary:
     """Run every raw record through validate -> dedupe -> persist."""
     summary = IngestSummary(filename=filename, source=source)
-    batch = ImportBatch(filename=filename, source=source)
+    batch = ImportBatch(filename=filename, source=source, request_id=request_id)
     session.add(batch)
     session.flush()
 
@@ -306,12 +311,23 @@ def ingest_deposit_json(session: Session, content: str, *, filename: str) -> Ing
         )
         _reject(summary, parsed, f"deposit envelope invalid: {problems}")
         return summary
-    return ingest_records(
+    request = session.get(ResearchRequest, deposit.request_id) if deposit.request_id else None
+    summary = ingest_records(
         session,
         deposit.prospects,
         filename=filename,
         source=deposit.source if deposit.source in ("codex", "csv", "manual") else "codex",
+        request_id=request.id if request else None,
     )
+    if deposit.request_id and not request:
+        summary.messages.append(f"note: request_id {deposit.request_id} does not exist; batch not linked")
+    if request and deposit.shortfall_reasons:
+        merged = list(request.shortfall)
+        for reason in deposit.shortfall_reasons:
+            if reason not in merged:
+                merged.append(reason)
+        request.shortfall = merged[:30]
+    return summary
 
 
 def resolve_dupe(session: Session, review: DupeReview, resolution: str) -> str:
@@ -407,3 +423,56 @@ def ingest_csv(session: Session, content: bytes, *, filename: str) -> IngestSumm
     reader = csv.DictReader(io.StringIO(text))
     records = [csv_row_to_record(row) for row in reader]
     return ingest_records(session, records, filename=filename, source="csv")
+
+
+def dry_run_deposit(session: Session, content: str) -> list[tuple[int, str, str]]:
+    """Predict what an import would do, writing nothing anywhere.
+
+    Returns (record_number, outcome, detail) per record, where outcome is
+    one of: create, enrich-or-duplicate, review, invalid — plus a single
+    (0, 'envelope-invalid', reason) row if the file itself is broken.
+    Built for the research agent to self-check before depositing.
+    """
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        return [(0, "envelope-invalid", f"not valid JSON: {exc}")]
+    try:
+        deposit = DepositEnvelope.model_validate(parsed)
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()[:5]
+        )
+        return [(0, "envelope-invalid", problems)]
+
+    results: list[tuple[int, str, str]] = []
+    if deposit.request_id and not session.get(ResearchRequest, deposit.request_id):
+        results.append((0, "warning", f"request_id {deposit.request_id} does not exist in the CRM"))
+    for index, raw in enumerate(deposit.prospects, start=1):
+        try:
+            record = ProspectRecord.model_validate(raw)
+        except ValidationError as exc:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
+            )
+            results.append((index, "invalid", problems))
+            continue
+        domain = normalize_domain(record.company.domain or record.company.website)
+        company = find_company(session, domain=domain, name=record.company.name)
+        if company and find_exact_prospect(session, company.id, record.full_name):
+            results.append((index, "enrich-or-duplicate",
+                            f"{record.full_name} already exists at {company.name}"))
+            continue
+        near = find_near_duplicate(
+            session,
+            company_id=company.id if company else None,
+            full_name=record.full_name,
+            email=record.email,
+            phone=record.phone,
+            linkedin_url=record.linkedin_url,
+        )
+        if near:
+            results.append((index, "review", f"near-duplicate: {near[1]}"))
+            continue
+        results.append((index, "create", f"{record.full_name} @ {record.company.name}"))
+    return results

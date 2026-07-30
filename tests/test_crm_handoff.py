@@ -103,6 +103,74 @@ def test_brief_contains_icp_and_exclusions():
     assert "python -m crm import --inbox" in brief
 
 
+def test_deleting_prospect_removes_its_dupe_reviews(session):
+    from crm.seed import seed, wipe
+
+    seed(session)
+    ingest_records(session, [record(
+        company={"name": "Sunrise Example Communities", "domain": "sunrise-communities.example"},
+        full_name="Peter Prototype",
+    )], filename="x.json", source="codex")
+    review = session.scalar(select(DupeReview))
+    assert review is not None
+    resolve_dupe(session, review, "discarded")
+
+    wipe(session)  # must not trip the dupe_reviews foreign key
+    session.flush()
+    assert session.scalar(select(Prospect.source).where(Prospect.source == "seed")) is None
+
+
+def test_deposit_tracks_request_and_shortfall(session):
+    from crm.ingest import ingest_deposit_json
+    from crm.models import ImportBatch, ResearchRequest
+
+    req = ResearchRequest(requested_count=5)
+    session.add(req)
+    session.flush()
+
+    deposit = json.dumps({
+        "schema_version": 1,
+        "request_id": req.id,
+        "shortfall_reasons": ["only 1 verifiable candidate", "only 1 verifiable candidate"],
+        "prospects": [record()],
+    })
+    summary = ingest_deposit_json(session, deposit, filename="r.json")
+
+    assert summary.created == 1
+    batch = session.scalar(select(ImportBatch).where(ImportBatch.request_id == req.id))
+    assert batch is not None and batch.created_count == 1
+    assert req.shortfall == ["only 1 verifiable candidate"]  # deduplicated
+
+
+def test_deposit_with_unknown_request_id_still_imports(session):
+    from crm.ingest import ingest_deposit_json
+
+    deposit = json.dumps({"schema_version": 1, "request_id": 999, "prospects": [record()]})
+    summary = ingest_deposit_json(session, deposit, filename="r.json")
+    assert summary.created == 1
+    assert any("does not exist" in m for m in summary.messages)
+
+
+def test_dry_run_predicts_without_writing(session):
+    from crm.ingest import dry_run_deposit
+    from crm.models import ImportBatch
+
+    ingest_records(session, [record()], filename="a.json", source="codex")
+    mixed = json.dumps({"schema_version": 1, "prospects": [
+        record(),                                        # exact duplicate
+        record(full_name="Janie Doe"),                   # near-duplicate
+        record(full_name="Sam New", company={"name": "Fresh Co", "domain": "fresh.example"}),
+        record(full_name="X", icp_score=999),            # invalid
+    ]})
+    outcomes = [o for _, o, _ in dry_run_deposit(session, mixed)]
+    assert outcomes == ["enrich-or-duplicate", "review", "create", "invalid"]
+    # Nothing was written: still one prospect, one batch.
+    assert session.scalar(select(Prospect.full_name)) == "Jane Doe"
+    assert len(list(session.scalars(select(ImportBatch)))) == 1
+
+    assert dry_run_deposit(session, "{broken")[0][1] == "envelope-invalid"
+
+
 def test_example_deposit_file_is_valid():
     from crm.ingest import DepositFile
 

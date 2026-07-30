@@ -293,6 +293,27 @@
       "default": null,
       "title": "Batch Note"
     },
+    "request_id": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "shortfall_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Shortfall Reasons",
+      "type": "array"
+    },
     "prospects": {
       "items": {
         "$ref": "#/$defs/ProspectRecord"

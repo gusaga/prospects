@@ -1,7 +1,11 @@
 {
   "schema_version": 1,
   "source": "codex",
+  "request_id": 1,
   "batch_note": "Example deposit showing every field. Two records: one complete, one minimal.",
+  "shortfall_reasons": [
+    "Example only: requested 3 but delivered 2 — third candidate's role could not be verified on any public page"
+  ],
   "prospects": [
     {
       "company": {

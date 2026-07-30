@@ -23,7 +23,9 @@ from ..models import (
     DupeReview,
     ImportBatch,
     Prospect,
+    ResearchRequest,
     Setting,
+    utc_now,
 )
 
 router = APIRouter()
@@ -74,11 +76,77 @@ def _lines(raw: str) -> list[str]:
     return [line.strip() for line in raw.replace(",", "\n").splitlines() if line.strip()]
 
 
+# ---- research requests -----------------------------------------------------
+
+
+def delivered_count(session: Session, request_id: int) -> int:
+    from sqlalchemy import func
+
+    return session.scalar(
+        select(func.coalesce(func.sum(ImportBatch.created_count), 0))
+        .where(ImportBatch.request_id == request_id)
+    ) or 0
+
+
+@router.post("/requests")
+def create_request(
+    request: Request,
+    session: Session = Depends(get_session),
+    count: int = Form(10),
+    region_focus: str = Form(""),
+    title_focus: str = Form(""),
+    notes: str = Form(""),
+):
+    count = max(1, min(100, count))
+    req = ResearchRequest(
+        requested_count=count,
+        region_focus=region_focus.strip() or None,
+        title_focus=title_focus.strip() or None,
+        notes=notes.strip() or None,
+    )
+    session.add(req)
+    session.flush()
+    return RedirectResponse(
+        f"/requests/{req.id}/brief", status_code=303
+    )
+
+
+@router.get("/requests/{request_id}/brief", response_class=PlainTextResponse)
+def request_brief(request_id: int, request: Request, session: Session = Depends(get_session)):
+    req = session.get(ResearchRequest, request_id)
+    if not req:
+        return PlainTextResponse("No such research request.", status_code=404)
+    icp = get_icp(session)
+    domains = sorted(
+        d for d in session.scalars(select(Company.domain)) if d and not d.endswith(".example")
+    )
+    return build_brief(icp, domains, req)
+
+
+@router.post("/requests/{request_id}/close")
+def close_request(request_id: int, request: Request, session: Session = Depends(get_session)):
+    req = session.get(ResearchRequest, request_id)
+    if req and req.status == "open":
+        req.status = "closed"
+        req.closed_at = utc_now()
+    return RedirectResponse("/import?toast=Request+closed", status_code=303)
+
+
 # ---- import & duplicate review -------------------------------------------
 
 
 @router.get("/import", response_class=HTMLResponse)
 def import_page(request: Request, session: Session = Depends(get_session)):
+    open_requests = [
+        {
+            "req": req,
+            "delivered": delivered_count(session, req.id),
+        }
+        for req in session.scalars(
+            select(ResearchRequest).where(ResearchRequest.status == "open")
+            .order_by(ResearchRequest.created_at.desc())
+        )
+    ]
     dupes = list(session.scalars(
         select(DupeReview)
         .options(joinedload(DupeReview.existing_prospect).joinedload(Prospect.company))
@@ -99,6 +167,7 @@ def import_page(request: Request, session: Session = Depends(get_session)):
     return render(
         request, "import.html",
         dupes=dupes, batches=batches, rejects=rejects,
+        open_requests=open_requests,
         inbox_files=[p.name for p in pending_files()],
         inbox_dir=str(config.INBOX_DIR),
         rejects_path=str(config.REJECTS_PATH),
@@ -252,13 +321,46 @@ def research_brief(request: Request, session: Session = Depends(get_session)):
     return build_brief(icp, domains)
 
 
-def build_brief(icp: dict, known_domains: list[str]) -> str:
+def build_brief(icp: dict, known_domains: list[str], req: ResearchRequest | None = None) -> str:
+    count = req.requested_count if req else 10
     regions = ", ".join(icp["regions"])
     titles = "\n".join(f"- {t}" for t in icp["target_titles"])
     adjacent = "\n".join(f"- {t}" for t in icp["adjacent_titles"])
     pains = "; ".join(icp["pain_points"])
     exclusions = "\n".join(f"- {d}" for d in known_domains) or "- (none yet)"
-    return f"""Research 10 new cold-call prospects for me.
+
+    focus = ""
+    if req and (req.region_focus or req.title_focus or req.notes):
+        lines = []
+        if req.region_focus:
+            lines.append(f"- Concentrate on: {req.region_focus}")
+        if req.title_focus:
+            lines.append(f"- Prioritize the title: {req.title_focus}")
+        if req.notes:
+            lines.append(f"- Extra instructions: {req.notes}")
+        focus = "\nFOCUS FOR THIS REQUEST\n" + "\n".join(lines) + "\n"
+
+    if req:
+        delivery = f"""HOW TO DELIVER
+Follow AGENTS.md at the repo root. In short:
+1. Write ONE JSON file matching schemas/prospect-deposit.schema.json into
+   inbox/, and set "request_id": {req.id} in the envelope so delivery is
+   tracked against this request.
+2. Self-check first: python -m crm validate inbox/<your-file>.json
+   Fix anything it flags as invalid.
+3. Deposit: python -m crm import --inbox
+   Confirm the summary shows your records were created (not rejected).
+4. If you deliver fewer than {count}, put every concrete reason in the
+   envelope's "shortfall_reasons" — do not pad with weak fits instead."""
+    else:
+        delivery = """HOW TO DELIVER
+Follow the deposit instructions in AGENTS.md at the repo root: write one
+JSON file matching schemas/prospect-deposit.schema.json into inbox/,
+self-check it with `python -m crm validate <file>`, then run
+`python -m crm import --inbox` and confirm the import summary shows
+your records were created (not rejected)."""
+
+    return f"""Research {count} new cold-call prospects for me.
 
 WHO I AM SELLING: {icp['product']}.
 
@@ -269,7 +371,7 @@ IDEAL CUSTOMER PROFILE
 - Account rule: {icp['account_rule']}
 - Their pain points: {pains}
 - Context: {icp['notes']}
-
+{focus}
 TARGET TITLES (best first)
 {titles}
 Adjacent titles that also count:
@@ -284,12 +386,11 @@ RULES
   team page is best). A DIRECT PHONE NUMBER is the single most valuable
   field — always check the company website, press releases, and public
   directories for one.
+- At most 3 contacts per company; breadth beats depth for cold calling.
+- Score each prospect with the rubric in AGENTS.md so scores stay
+  comparable between batches.
 - Skip these companies I already have (by domain):
 {exclusions}
 
-HOW TO DELIVER
-Follow the deposit instructions in AGENTS.md at the repo root: write one
-JSON file matching schemas/prospect-deposit.schema.json into inbox/, then
-run `python -m crm import --inbox` and confirm the import summary shows
-your records were created (not rejected).
+{delivery}
 """

@@ -52,10 +52,29 @@ ready-to-use brief from it). Current profile:
 | `phone` | **top priority** | A direct or company line you saw published. This is a cold-call list — hunt for it (site footer, contact page, press releases, public directories) |
 | `email` | wanted | Only if published; never inferred |
 | `linkedin_url` | wanted | Public profile URL |
-| `icp_score` | **yes** | 0–100 fit score you assign |
+| `icp_score` | **yes** | 0–100, using the rubric below |
 | `icp_rationale` | **yes** | One line on why they fit |
 | `evidence[]` | **yes, ≥1** | `{url, note}` — public pages proving role + account type |
 | `notes` | optional | Anything useful for a cold call (recent news, projects) |
+
+At most **3 contacts per company** — breadth beats depth for cold calling.
+
+## Scoring rubric (keep scores comparable between batches)
+
+Start from what you can **verify with evidence URLs**, not vibes:
+
+- **90–100** — exact target title, at a verified owner/developer/homebuilder,
+  in a listed region, company size in band. All four confirmed.
+- **75–89** — adjacent title instead of exact, OR exactly one of
+  region/size/account-type is unconfirmed (say which in the rationale).
+- **60–74** — two attributes unconfirmed, or region is a Sun Belt neighbor
+  rather than a listed state.
+- **Below 60** — don't include it unless something notable justifies it
+  (explain in the rationale).
+
+A published **direct phone adds +5** (cap 100). If you can't verify the
+company is an owner/developer (vs. a service firm), it doesn't belong in
+the deposit at all.
 
 ## How to deposit (exactly)
 
@@ -65,18 +84,41 @@ ready-to-use brief from it). Current profile:
    `schemas/example-deposit.json` for a complete example. Envelope:
 
    ```json
-   { "schema_version": 1, "source": "codex", "batch_note": "…", "prospects": [ … ] }
+   {
+     "schema_version": 1,
+     "source": "codex",
+     "request_id": 3,
+     "batch_note": "…",
+     "shortfall_reasons": [],
+     "prospects": [ … ]
+   }
    ```
 
-2. Run, from the repo root:
+   If your brief mentions a request id (`R-3` → `"request_id": 3`), set it —
+   that's how delivery gets tracked against the ask. If you delivered fewer
+   prospects than requested, put every concrete reason in
+   `shortfall_reasons` (e.g. "only 6 companies in the size band published a
+   team page"). Never pad with weak fits instead.
+
+2. **Self-check before depositing** (from the repo root; if `python` doesn't
+   resolve, use `.venv/Scripts/python.exe` on Windows):
+
+   ```
+   python -m crm validate inbox/<your-file>.json
+   ```
+
+   This is a dry run — it writes nothing. It tells you, per record, whether
+   it would be created, treated as a duplicate, parked for human review, or
+   rejected as invalid (with the exact validation errors). **Fix everything
+   it marks `invalid` and re-validate until clean.**
+
+3. Deposit:
 
    ```
    python -m crm import --inbox
    ```
 
-   (If `python` doesn't resolve, use `.venv/Scripts/python.exe` on Windows.)
-
-3. **Verify it worked.** The command prints one line per file:
+4. **Verify it worked.** The command prints one line per file:
 
    ```
    your-file.json: 10 records: 8 created, 1 enriched, 0 duplicates skipped,
@@ -89,7 +131,7 @@ ready-to-use brief from it). Current profile:
      lines), fix those records, and deposit a corrected file. Do not report
      the run as complete while records you could fix are rejected.
 
-4. You can double-check totals with `python -m crm status`.
+5. You can double-check totals with `python -m crm status`.
 
 ## Quality bar
 

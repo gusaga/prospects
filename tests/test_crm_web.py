@@ -127,6 +127,26 @@ def test_duplicate_manual_add_redirects_to_existing(client):
     assert second.headers["location"].split("?")[0] == first
 
 
+def test_research_request_flow(client):
+    created = client.post("/requests", data={
+        "count": "7", "region_focus": "Houston metro", "title_focus": "", "notes": "",
+    })
+    assert created.status_code == 303
+    brief_url = created.headers["location"]
+    brief = client.get(brief_url)
+    assert brief.status_code == 200
+    assert "Research 7 new cold-call prospects" in brief.text
+    assert "Houston metro" in brief.text
+    assert '"request_id": 1' in brief.text
+
+    page = client.get("/import")
+    assert "R-1" in page.text and "0 / 7 delivered" in page.text
+
+    closed = client.post("/requests/1/close")
+    assert closed.status_code == 303
+    assert "R-1" not in client.get("/import").text
+
+
 def test_note_append_only(client):
     location = add_prospect(client).split("?")[0]
     prospect_id = location.rsplit("/", 1)[1]

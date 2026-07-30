@@ -45,10 +45,12 @@ Python 3.11+ required. The database is a single file, `data/crm.db`.
 
 ## Getting research done
 
-Open this repo in a Codex task, paste the generated brief (or just point it
-at `AGENTS.md`), and let it research. It writes a JSON file into `inbox/`
-and runs `python -m crm import --inbox`. New prospects appear in the app —
-nothing else to wire up.
+On the **Import page**, create a research request (how many, optional
+region/title focus) — it generates a brief carrying a request ID. Paste
+that into a Codex task on this repo. The agent researches, self-checks its
+file with `python -m crm validate`, deposits into `inbox/`, and imports.
+The Import page then shows delivered-vs-requested for each open request,
+plus any shortfall reasons the agent reported.
 
 ## CLI reference
 
@@ -57,6 +59,7 @@ python -m crm                 start the app (and open the browser)
 python -m crm serve --port N  start on a different port
 python -m crm import FILE     import one deposit JSON file
 python -m crm import --inbox  import everything waiting in inbox/
+python -m crm validate FILE   dry-run a deposit: report, write nothing
 python -m crm status          row counts and pending work
 python -m crm seed [--wipe]   add / remove the 25 fake sample prospects
 python -m crm backup          back up the database now

@@ -88,6 +88,10 @@ class Prospect(TimestampMixin, Base):
     activities: Mapped[list["Activity"]] = relationship(
         back_populates="prospect", cascade="all, delete-orphan", order_by="Activity.created_at.desc()"
     )
+    # Reviews that point at this prospect die with it.
+    dupe_reviews: Mapped[list["DupeReview"]] = relationship(
+        back_populates="existing_prospect", cascade="all, delete-orphan"
+    )
 
 
 class Activity(Base):
@@ -111,10 +115,31 @@ class Setting(Base):
     value: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False)
 
 
+class ResearchRequest(Base):
+    """One ask handed to the research agent: 'find me N prospects'.
+
+    Deposits reference the request id, so the app can show how much of the
+    ask was actually delivered and why the agent fell short.
+    """
+
+    __tablename__ = "research_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    requested_count: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    region_focus: Mapped[str | None] = mapped_column(String(160))
+    title_focus: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="open", index=True, nullable=False)
+    shortfall: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ImportBatch(Base):
     __tablename__ = "import_batches"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("research_requests.id"), index=True)
     filename: Mapped[str] = mapped_column(String(500), nullable=False)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
     created_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -140,4 +165,4 @@ class DupeReview(Base):
     resolution: Mapped[str | None] = mapped_column(String(16))  # merged | kept_both | discarded
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
 
-    existing_prospect: Mapped[Prospect] = relationship()
+    existing_prospect: Mapped[Prospect] = relationship(back_populates="dupe_reviews")

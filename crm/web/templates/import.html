@@ -11,6 +11,48 @@
 
 <div class="detail-grid">
   <section class="card">
+    <h2>Research requests</h2>
+    {% if open_requests %}
+    {% for item in open_requests %}
+    <div class="dupe-card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:.5rem;">
+        <strong>R-{{ item.req.id }}</strong>
+        <span class="{{ 'score-hi score' if item.delivered >= item.req.requested_count else 'muted small' }}">
+          {{ item.delivered }} / {{ item.req.requested_count }} delivered
+        </span>
+      </div>
+      <div class="muted small">
+        Opened {{ item.req.created_at | fmt_date }}
+        {%- if item.req.region_focus %} · focus: {{ item.req.region_focus }}{% endif %}
+        {%- if item.req.title_focus %} · title: {{ item.req.title_focus }}{% endif %}
+      </div>
+      {% if item.req.shortfall %}
+      <div class="small" style="margin-top:.3rem;"><strong>Agent reported:</strong>
+        <ul class="small" style="margin:.15rem 0 0; padding-left:1.1rem;">
+          {% for reason in item.req.shortfall %}<li>{{ reason }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      <div class="quick-actions" style="margin-top:.45rem;">
+        <a class="btn btn-sm" href="/requests/{{ item.req.id }}/brief" target="_blank">📋 Open brief</a>
+        <form method="post" action="/requests/{{ item.req.id }}/close">
+          <button class="btn btn-sm btn-dim">Close</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted small">No open requests. Create one, paste the brief into a Codex task,
+    and deliveries get tracked against it here.</p>
+    {% endif %}
+    <form method="post" action="/requests" class="form-grid" style="margin-top:.5rem;">
+      <label>How many prospects <input type="number" name="count" value="10" min="1" max="100"></label>
+      <label>Region focus (optional) <input name="region_focus" placeholder="e.g. Houston metro"></label>
+      <label>Title focus (optional) <input name="title_focus" placeholder="e.g. VP of Land Development"></label>
+      <label>Extra instructions (optional) <input name="notes" placeholder="e.g. only companies with active communities"></label>
+      <div class="span2"><button class="btn btn-primary btn-sm">Create request → get brief</button></div>
+    </form>
+
     <h2>Research inbox</h2>
     {% if inbox_files %}
     <p><strong>{{ inbox_files|length }} deposit{{ '' if inbox_files|length == 1 else 's' }} waiting:</strong></p>

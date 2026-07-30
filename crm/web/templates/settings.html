@@ -8,7 +8,8 @@
     <p class="muted">Who you're hunting for. This drives the research brief you hand to the Codex agent.</p>
   </div>
   <div class="page-actions">
-    <a class="btn btn-primary" href="/brief" target="_blank">📋 Generate research brief</a>
+    <a class="btn btn-primary" href="/import">📋 New research request</a>
+    <a class="btn" href="/brief" target="_blank" title="Quick brief without delivery tracking">Quick brief</a>
   </div>
 </div>
 
@@ -47,9 +48,9 @@
     <h2>The research loop</h2>
     <ol class="small" style="padding-left:1.1rem; line-height:1.7;">
       <li>Edit the ICP here and <strong>Save</strong>.</li>
-      <li>Click <strong>Generate research brief</strong> and paste it into a Codex task on this repo.</li>
-      <li>The agent researches and deposits a JSON file into <span class="mono">inbox/</span>.</li>
-      <li>Records appear on the <a href="/import">Import page</a> — validated, deduped, rejects explained.</li>
+      <li>Create a <a href="/import">research request</a> and paste its brief into a Codex task on this repo.</li>
+      <li>The agent researches, self-checks with <span class="mono">crm validate</span>, and deposits into <span class="mono">inbox/</span>.</li>
+      <li>The <a href="/import">Import page</a> tracks delivered-vs-requested, dedupes, and explains rejects.</li>
       <li>Queue the good ones and start dialing from <a href="/">Today's calls</a>.</li>
     </ol>
   </section>
