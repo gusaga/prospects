@@ -16,9 +16,12 @@
     {% for item in open_requests %}
     <div class="dupe-card">
       <div style="display:flex; justify-content:space-between; align-items:baseline; gap:.5rem;">
-        <strong>R-{{ item.req.id }}</strong>
+        <span><strong>R-{{ item.req.id }}</strong>
+          {% if item.req.kind == 'enrich' %}<span class="pill status-follow_up">Enrichment</span>
+          {% else %}<span class="pill status-queued">Discovery</span>{% endif %}
+        </span>
         <span class="{{ 'score-hi score' if item.delivered >= item.req.requested_count else 'muted small' }}">
-          {{ item.delivered }} / {{ item.req.requested_count }} delivered
+          {{ item.delivered }} / {{ item.req.requested_count }} {{ 'enriched' if item.req.kind == 'enrich' else 'delivered' }}
         </span>
       </div>
       <div class="muted small">

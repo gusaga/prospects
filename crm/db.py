@@ -40,7 +40,14 @@ def _ensure_columns(engine: Engine) -> None:
     SQLite can't add a FK constraint via ALTER, so upgraded databases get a
     plain column; new databases get the real constraint from the model.
     """
-    additions = {"import_batches": {"request_id": "INTEGER"}}
+    additions = {
+        "import_batches": {"request_id": "INTEGER"},
+        "prospects": {"city": "VARCHAR(160)", "profiles": "JSON NOT NULL DEFAULT '[]'"},
+        "research_requests": {
+            "kind": "VARCHAR(16) NOT NULL DEFAULT 'discover'",
+            "target_ids": "JSON NOT NULL DEFAULT '[]'",
+        },
+    }
     inspector = inspect(engine)
     for table, columns in additions.items():
         if table not in inspector.get_table_names():

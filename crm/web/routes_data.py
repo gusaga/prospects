@@ -19,6 +19,7 @@ from ..ingest import ingest_csv, resolve_dupe
 from ..models import (
     CLOSED_STATUSES,
     STATUSES,
+    Activity,
     Company,
     DupeReview,
     ImportBatch,
@@ -79,12 +80,12 @@ def _lines(raw: str) -> list[str]:
 # ---- research requests -----------------------------------------------------
 
 
-def delivered_count(session: Session, request_id: int) -> int:
+def delivered_count(session: Session, req: ResearchRequest) -> int:
     from sqlalchemy import func
 
+    column = ImportBatch.enriched_count if req.kind == "enrich" else ImportBatch.created_count
     return session.scalar(
-        select(func.coalesce(func.sum(ImportBatch.created_count), 0))
-        .where(ImportBatch.request_id == request_id)
+        select(func.coalesce(func.sum(column), 0)).where(ImportBatch.request_id == req.id)
     ) or 0
 
 
@@ -111,16 +112,53 @@ def create_request(
     )
 
 
+ENRICH_TARGET_CAP = 25
+
+
+@router.post("/requests/enrich")
+async def create_enrich_request(request: Request, session: Session = Depends(get_session)):
+    """Create a stage-2 deep-research request, from one prospect or a filtered view."""
+    from .queries import prospect_query
+
+    form = await request.form()
+    if form.get("prospect_id"):
+        targets = [session.get(Prospect, int(form["prospect_id"]))]
+        targets = [p for p in targets if p]
+    else:
+        filters = {
+            key: str(form.get(key, "")).strip()
+            for key in ("q", "status", "region", "priority", "min_score", "due")
+        }
+        filters.update({"sort": "score", "dir": "desc"})
+        targets = list(session.scalars(prospect_query(session, filters)).unique())
+    targets = [p for p in targets if p.status not in CLOSED_STATUSES][:ENRICH_TARGET_CAP]
+    if not targets:
+        return RedirectResponse(
+            "/prospects?toast=Nothing+to+enrich+in+that+selection", status_code=303
+        )
+    req = ResearchRequest(
+        kind="enrich",
+        target_ids=[p.id for p in targets],
+        requested_count=len(targets),
+    )
+    session.add(req)
+    session.flush()
+    return RedirectResponse(f"/requests/{req.id}/brief", status_code=303)
+
+
 @router.get("/requests/{request_id}/brief", response_class=PlainTextResponse)
 def request_brief(request_id: int, request: Request, session: Session = Depends(get_session)):
     req = session.get(ResearchRequest, request_id)
     if not req:
         return PlainTextResponse("No such research request.", status_code=404)
     icp = get_icp(session)
+    if req.kind == "enrich":
+        targets = [p for pid in req.target_ids if (p := session.get(Prospect, pid))]
+        return build_enrich_brief(icp, req, targets)
     domains = sorted(
         d for d in session.scalars(select(Company.domain)) if d and not d.endswith(".example")
     )
-    return build_brief(icp, domains, req)
+    return build_brief(icp, domains, req, decisions=decision_patterns(session))
 
 
 @router.post("/requests/{request_id}/close")
@@ -140,7 +178,7 @@ def import_page(request: Request, session: Session = Depends(get_session)):
     open_requests = [
         {
             "req": req,
-            "delivered": delivered_count(session, req.id),
+            "delivered": delivered_count(session, req),
         }
         for req in session.scalars(
             select(ResearchRequest).where(ResearchRequest.status == "open")
@@ -318,16 +356,69 @@ def research_brief(request: Request, session: Session = Depends(get_session)):
     domains = sorted(
         d for d in session.scalars(select(Company.domain)) if d and not d.endswith(".example")
     )
-    return build_brief(icp, domains)
+    return build_brief(icp, domains, decisions=decision_patterns(session))
 
 
-def build_brief(icp: dict, known_domains: list[str], req: ResearchRequest | None = None) -> str:
+def decision_patterns(session: Session) -> dict:
+    """Distill Gustavo's vetting decisions so every discovery brief teaches
+    the agent what he actually accepts and rejects."""
+    rejected = []
+    for p in session.scalars(
+        select(Prospect).join(Prospect.company).options(joinedload(Prospect.company))
+        .where(Prospect.status.in_(CLOSED_STATUSES))
+        .order_by(Prospect.updated_at.desc()).limit(10)
+    ):
+        reason = (p.notes or "").strip()
+        if not reason:
+            last_status = session.scalar(
+                select(Activity.body).where(
+                    Activity.prospect_id == p.id, Activity.kind == "status"
+                ).order_by(Activity.created_at.desc()).limit(1)
+            )
+            reason = (last_status or "").strip()
+        rejected.append({
+            "company": p.company.name,
+            "title": p.title or "",
+            "reason": reason or "no reason recorded",
+        })
+
+    accepted_titles = Counter(
+        (p.title or "unknown").strip()
+        for p in session.scalars(
+            select(Prospect).where(Prospect.status.in_(("queued", "follow_up", "conversation", "meeting")))
+        )
+    )
+    return {"rejected": rejected, "accepted_titles": accepted_titles.most_common(8)}
+
+
+def build_brief(
+    icp: dict,
+    known_domains: list[str],
+    req: ResearchRequest | None = None,
+    decisions: dict | None = None,
+) -> str:
     count = req.requested_count if req else 10
     regions = ", ".join(icp["regions"])
     titles = "\n".join(f"- {t}" for t in icp["target_titles"])
     adjacent = "\n".join(f"- {t}" for t in icp["adjacent_titles"])
     pains = "; ".join(icp["pain_points"])
     exclusions = "\n".join(f"- {d}" for d in known_domains) or "- (none yet)"
+
+    learning = ""
+    if decisions and (decisions["rejected"] or decisions["accepted_titles"]):
+        lines = []
+        if decisions["accepted_titles"]:
+            accepted = ", ".join(f"{title} ({n})" for title, n in decisions["accepted_titles"])
+            lines.append(f"- Titles I have accepted and queued for calling: {accepted}")
+        for item in decisions["rejected"]:
+            lines.append(
+                f"- REJECTED: {item['title'] or 'contact'} at {item['company']} — {item['reason']}"
+            )
+        learning = (
+            "\nLEARN FROM MY DECISIONS (my actual vetting on past batches)\n"
+            + "\n".join(lines)
+            + "\nDo not bring me more prospects that match my rejection patterns.\n"
+        )
 
     focus = ""
     if req and (req.region_focus or req.title_focus or req.notes):
@@ -372,6 +463,7 @@ IDEAL CUSTOMER PROFILE
 - Their pain points: {pains}
 - Context: {icp['notes']}
 {focus}
+{learning}
 TARGET TITLES (best first)
 {titles}
 Adjacent titles that also count:
@@ -393,4 +485,72 @@ RULES
 {exclusions}
 
 {delivery}
+"""
+
+
+def build_enrich_brief(icp: dict, req: ResearchRequest, targets: list[Prospect]) -> str:
+    """Stage 2: deep research on already-vetted prospects, using known anchors."""
+    blocks = []
+    for p in targets:
+        have = []
+        missing = []
+        for label, value in (
+            ("direct phone", p.phone), ("email", p.email),
+            ("LinkedIn", p.linkedin_url), ("city", p.city),
+        ):
+            (have if value else missing).append(label)
+        known = "; ".join(f"{label}: yes" for label in have) or "nothing beyond the basics"
+        evidence = "\n".join(f"    - {link.get('url')}" for link in p.evidence[:4])
+        blocks.append(f"""### prospect_id {p.id}: {p.full_name}
+- Title: {p.title or 'unknown'}
+- Company: {p.company.name}{f' ({p.company.domain})' if p.company.domain else ''}
+- Website: {p.company.website or 'unknown'}
+- Region: {p.region or p.company.region or 'unknown'}
+- Already have: {known}
+- MISSING (find these): {', '.join(missing) or 'nothing critical — focus on rapport intel'}
+- Known evidence pages:
+{evidence or '    - (none)'}""")
+
+    targets_text = "\n\n".join(blocks)
+    return f"""Deep-research these {len(targets)} prospects I have already vetted. Do NOT
+find new people — enrich exactly the ones listed, using their names and
+companies as search anchors.
+
+CONTEXT: I sell {icp['product']}. These are accepted cold-call leads;
+your job is to make each one maximally callable.
+
+WHAT TO FIND, IN PRIORITY ORDER
+1. DIRECT PHONE NUMBER — the single most valuable field. Company site
+   footer/contact pages, press releases, county/public directories,
+   chamber-of-commerce listings.
+2. LinkedIn profile URL + the city they are based in.
+3. Rapport intel: recent news, project announcements, quotes, conference
+   talks, permits/filings involving them or their company. Put this in the
+   record's "notes" — it becomes call-prep context.
+4. Other PUBLIC profiles (Facebook/Instagram/X business or public pages).
+   No logins, so only what is publicly visible — skip anything gated.
+
+RULES
+- Public no-login web sources only; no data/enrichment APIs; never guess
+  emails or phones — only record what you actually saw published.
+- Every new fact needs an evidence URL in the record's "evidence" list.
+- Do not change names/titles. If someone changed roles or left, do not
+  overwrite anything — describe what you found in "notes".
+
+THE TARGETS
+{targets_text}
+
+HOW TO DELIVER
+Follow AGENTS.md. Write ONE JSON file into inbox/ with:
+- "schema_version": 2, "request_id": {req.id}
+- one record per target, each carrying its "prospect_id" from above
+  (that is how the update lands on the right person), plus "full_name"
+  and "company" repeated exactly as listed — the schema requires them
+- new facts in the matching fields (phone, email, linkedin_url, city,
+  "profiles": [{{"label": "Facebook", "url": "…"}}]), rapport intel in
+  "notes", evidence URLs for everything
+Then self-check with `python -m crm validate inbox/<file>.json` (every
+record should say "enrich"), deposit with `python -m crm import --inbox`,
+and confirm the summary shows records enriched, not rejected. If a field
+truly is not publicly findable for someone, say so in "shortfall_reasons".
 """

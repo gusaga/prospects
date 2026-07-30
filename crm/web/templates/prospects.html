@@ -9,6 +9,15 @@
     <p class="muted"><span id="result-count">{{ count }}</span> shown</p>
   </div>
   <div class="page-actions">
+    <form method="post" action="/requests/enrich" id="enrich-view-form">
+      <input type="hidden" name="q" value="{{ f.q }}">
+      <input type="hidden" name="status" value="{{ f.status }}">
+      <input type="hidden" name="region" value="{{ f.region }}">
+      <input type="hidden" name="priority" value="{{ f.priority }}">
+      <input type="hidden" name="min_score" value="{{ f.min_score }}">
+      <input type="hidden" name="due" value="{{ f.due }}">
+      <button class="btn" title="Create a stage-2 research brief for the prospects in this filtered view (max 25, closed statuses skipped)">🔎 Enrich this view</button>
+    </form>
     <a class="btn" href="/export.csv?{{ query_string }}">⬇ Export this view (CSV)</a>
   </div>
 </div>

@@ -176,5 +176,88 @@ def test_example_deposit_file_is_valid():
 
     example = (config.PROJECT_ROOT / "schemas" / "example-deposit.json").read_text(encoding="utf-8")
     deposit = DepositFile.model_validate_json(example)
-    assert deposit.schema_version == 1
-    assert len(deposit.prospects) == 2
+    assert deposit.schema_version == 2
+    assert len(deposit.prospects) == 3
+    assert deposit.prospects[2].prospect_id == 12
+
+
+def test_enrichment_record_targets_prospect_directly(session):
+    ingest_records(session, [record()], filename="a.json", source="codex")
+    target = session.scalar(select(Prospect))
+    assert target.phone is None and target.city is None
+
+    enrichment = {
+        "prospect_id": target.id,
+        "company": {"name": "Acme Communities"},
+        "full_name": "Jane Doe",
+        "phone": "(512) 555-0142",
+        "city": "Austin",
+        "profiles": [{"label": "Facebook", "url": "https://facebook.example/janedoe"}],
+        "notes": "Spoke at TEXO panel on entitlement delays.",
+        "evidence": [{"url": "https://news.example/article"}],
+    }
+    summary = ingest_records(session, [enrichment], filename="e.json", source="codex")
+
+    assert summary.enriched == 1 and summary.created == 0
+    assert target.phone == "(512) 555-0142"
+    assert target.city == "Austin"
+    assert target.profiles[0]["label"] == "Facebook"
+    assert target.notes == "Spoke at TEXO panel on entitlement delays."
+
+    # Second pass: notes exist now, so new intel appends to the activity log.
+    enrichment["notes"] = "Company announced a 400-lot community in May 2026."
+    summary = ingest_records(session, [enrichment], filename="e2.json", source="codex")
+    assert summary.enriched == 1
+    from crm.models import Activity
+    note = session.scalar(select(Activity).where(Activity.kind == "note"))
+    assert note is not None and note.body.startswith("[research]")
+    # Profiles merged, not duplicated.
+    assert len(target.profiles) == 1
+
+
+def test_enrichment_with_unknown_prospect_id_is_rejected(session):
+    bad = record()
+    bad["prospect_id"] = 424242
+    summary = ingest_records(session, [bad], filename="e.json", source="codex")
+    assert summary.rejected == 1 and summary.created == 0
+
+
+def test_dry_run_reports_enrich_for_prospect_id(session):
+    ingest_records(session, [record()], filename="a.json", source="codex")
+    target_id = session.scalar(select(Prospect.id))
+    payload = json.dumps({"schema_version": 2, "prospects": [
+        {**record(), "prospect_id": target_id},
+        {**record(full_name="Ghost Person"), "prospect_id": 424242},
+    ]})
+    from crm.ingest import dry_run_deposit
+    outcomes = [o for _, o, _ in dry_run_deposit(session, payload)]
+    assert outcomes == ["enrich", "invalid"]
+
+
+def test_enrich_brief_lists_targets_and_priorities(session):
+    from crm.models import ResearchRequest
+    from crm.web.routes_data import DEFAULT_ICP, build_enrich_brief
+
+    ingest_records(session, [record()], filename="a.json", source="codex")
+    target = session.scalar(select(Prospect))
+    req = ResearchRequest(kind="enrich", target_ids=[target.id], requested_count=1)
+    brief = build_enrich_brief(DEFAULT_ICP, req, [target])
+
+    assert f"prospect_id {target.id}: Jane Doe" in brief
+    assert "DIRECT PHONE NUMBER" in brief
+    assert "direct phone" in brief  # listed as missing
+    assert '"schema_version": 2' in brief
+
+
+def test_discovery_brief_learns_from_decisions():
+    from crm.web.routes_data import DEFAULT_ICP, build_brief
+
+    decisions = {
+        "rejected": [{"company": "Consulting Firm LLC", "title": "VP of Land Development",
+                      "reason": "engineering services firm, not an owner"}],
+        "accepted_titles": [("VP of Land Development", 9)],
+    }
+    brief = build_brief(DEFAULT_ICP, [], decisions=decisions)
+    assert "LEARN FROM MY DECISIONS" in brief
+    assert "Consulting Firm LLC" in brief
+    assert "VP of Land Development (9)" in brief

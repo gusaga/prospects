@@ -1,10 +1,17 @@
 # Instructions for the research agent (Codex)
 
-You are the research layer for a local cold-call prospecting CRM. Your job:
-find companies and people matching the ICP below using **your own web
-browsing/search only**, then deposit them as a JSON file. The CRM (built and
-maintained separately) handles validation, dedupe, storage, and the UI — you
-never touch its database directly.
+You are the research layer for a local cold-call prospecting CRM. The CRM
+(built and maintained separately) handles validation, dedupe, storage, and
+the UI — you never touch its database directly. You use **your own web
+browsing/search only** and deliver everything as JSON deposit files.
+
+There are two kinds of jobs, and the brief you receive tells you which:
+
+- **Stage 1 — discovery** ("Research N new cold-call prospects"): find NEW
+  companies and people matching the ICP below.
+- **Stage 2 — enrichment** ("Deep-research these prospects I have already
+  vetted"): do NOT find new people. Deepen the specific prospects listed in
+  the brief — each has a `prospect_id`. See "Stage 2" near the end.
 
 ## Hard rules
 
@@ -132,6 +139,31 @@ the deposit at all.
      the run as complete while records you could fix are rejected.
 
 5. You can double-check totals with `python -m crm status`.
+
+## Stage 2 — enrichment jobs
+
+When the brief lists existing prospects with `prospect_id` numbers:
+
+- **Every record you deposit must carry that `prospect_id`**, plus
+  `full_name` and `company` repeated exactly as the brief lists them (the
+  schema requires those fields). The CRM applies your record directly to
+  that prospect: it fills empty fields, merges evidence and profile links,
+  and appends your `notes` to the activity log. It never overwrites
+  existing values — so do not bother re-sending facts the brief says are
+  already known.
+- Priority order: **1) direct phone, 2) LinkedIn URL + city, 3) rapport
+  intel in `notes`** (recent news, projects, quotes, talks, permits — call
+  ammunition), **4) other public profiles** in
+  `"profiles": [{"label": "Facebook", "url": "…"}]`.
+- Reality check on socials: you cannot log in anywhere, and most
+  Facebook/Instagram content is login-walled. Only record profiles that are
+  publicly visible. Do not burn time forcing it — a phone number is worth
+  more than every social link combined.
+- Never change a person's name or title. If you find they changed roles or
+  left the company, put what you found (with the evidence URL) in `notes`.
+- Use `"schema_version": 2` and run `python -m crm validate` before
+  depositing — every record should report `enrich`, not `create`. A record
+  that says `create` has a wrong or missing `prospect_id`.
 
 ## Quality bar
 

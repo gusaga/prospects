@@ -147,6 +147,29 @@ def test_research_request_flow(client):
     assert "R-1" not in client.get("/import").text
 
 
+def test_enrich_request_from_detail_page(client):
+    location = add_prospect(client).split("?")[0]
+    prospect_id = location.rsplit("/", 1)[1]
+    created = client.post("/requests/enrich", data={"prospect_id": prospect_id})
+    assert created.status_code == 303
+    brief = client.get(created.headers["location"])
+    assert f"prospect_id {prospect_id}: Jane Doe" in brief.text
+    page = client.get("/import")
+    assert "Enrichment" in page.text and "0 / 1 enriched" in page.text
+
+
+def test_enrich_request_from_filtered_view_skips_closed(client):
+    add_prospect(client)
+    add_prospect(client, full_name="Nope Person", company_name="Nope Co",
+                 company_domain="nope.example", status="not_fit",
+                 phone="(305) 555-0113", email="nope@nope.example")
+    created = client.post("/requests/enrich", data={"q": "", "status": "", "region": "",
+                                                    "priority": "", "min_score": "", "due": ""})
+    brief = client.get(created.headers["location"])
+    assert "Jane Doe" in brief.text
+    assert "Nope Person" not in brief.text  # closed statuses are skipped
+
+
 def test_note_append_only(client):
     location = add_prospect(client).split("?")[0]
     prospect_id = location.rsplit("/", 1)[1]

@@ -108,9 +108,44 @@
       "title": "EvidenceLink",
       "type": "object"
     },
-    "ProspectRecord": {
-      "description": "One prospect as deposited by the research agent (or a CSV row).",
+    "ProfileLink": {
       "properties": {
+        "label": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 2048,
+          "minLength": 10,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "ProfileLink",
+      "type": "object"
+    },
+    "ProspectRecord": {
+      "description": "One prospect as deposited by the research agent (or a CSV row).\n\n`prospect_id` marks an enrichment record: it targets that existing\nprospect directly instead of being matched by company + name.",
+      "properties": {
+        "prospect_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prospect Id"
+        },
         "company": {
           "$ref": "#/$defs/CompanyIn"
         },
@@ -184,6 +219,27 @@
           ],
           "default": null,
           "title": "Region"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "profiles": {
+          "items": {
+            "$ref": "#/$defs/ProfileLink"
+          },
+          "maxItems": 8,
+          "title": "Profiles",
+          "type": "array"
         },
         "icp_score": {
           "anyOf": [
@@ -267,10 +323,13 @@
       "type": "object"
     }
   },
-  "description": "A JSON file the research agent writes into inbox/ to deposit prospects into the CRM.",
+  "description": "A JSON file the research agent writes into inbox/ to deposit or enrich prospects. v2 adds prospect_id (enrichment), city, and profiles.",
   "properties": {
     "schema_version": {
-      "const": 1,
+      "enum": [
+        1,
+        2
+      ],
       "title": "Schema Version",
       "type": "integer"
     },
@@ -328,6 +387,6 @@
     "schema_version",
     "prospects"
   ],
-  "title": "Prospect deposit file (v1)",
+  "title": "Prospect deposit file (v2)",
   "type": "object"
 }

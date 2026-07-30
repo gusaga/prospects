@@ -73,6 +73,9 @@ class Prospect(TimestampMixin, Base):
     email: Mapped[str | None] = mapped_column(String(320))
     linkedin_url: Mapped[str | None] = mapped_column(String(2048))
     region: Mapped[str | None] = mapped_column(String(160))
+    city: Mapped[str | None] = mapped_column(String(160))
+    # Other public profiles found by enrichment: [{"label": str, "url": str}]
+    profiles: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
     icp_score: Mapped[int | None] = mapped_column(Integer)  # 0–100
     icp_rationale: Mapped[str | None] = mapped_column(String(500))
     # List of {"url": str, "note": str|None} source links backing the record.
@@ -125,6 +128,9 @@ class ResearchRequest(Base):
     __tablename__ = "research_requests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[str] = mapped_column(String(16), default="discover", nullable=False)  # discover | enrich
+    # For enrich requests: the prospect ids the agent was asked to deepen.
+    target_ids: Mapped[list[int]] = mapped_column(JSON, default=list, nullable=False)
     requested_count: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
     region_focus: Mapped[str | None] = mapped_column(String(160))
     title_focus: Mapped[str | None] = mapped_column(String(255))

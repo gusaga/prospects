@@ -31,7 +31,7 @@ from .models import STATUSES, Activity, Company, DupeReview, ImportBatch, Prospe
 SCHEMA_VERSION = 1
 
 # Fields an exact duplicate may fill in when the existing value is empty.
-ENRICHABLE_FIELDS = ("title", "phone", "email", "linkedin_url", "region", "icp_score", "icp_rationale")
+ENRICHABLE_FIELDS = ("title", "phone", "email", "linkedin_url", "region", "city", "icp_score", "icp_rationale")
 
 
 class CompanyIn(BaseModel):
@@ -55,9 +55,26 @@ class EvidenceLink(BaseModel):
         return value
 
 
-class ProspectRecord(BaseModel):
-    """One prospect as deposited by the research agent (or a CSV row)."""
+class ProfileLink(BaseModel):
+    label: str = Field(min_length=1, max_length=40)
+    url: str = Field(min_length=10, max_length=2048)
 
+    @field_validator("url")
+    @classmethod
+    def must_be_http(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("profile url must start with http:// or https://")
+        return value
+
+
+class ProspectRecord(BaseModel):
+    """One prospect as deposited by the research agent (or a CSV row).
+
+    `prospect_id` marks an enrichment record: it targets that existing
+    prospect directly instead of being matched by company + name.
+    """
+
+    prospect_id: int | None = Field(default=None, ge=1)
     company: CompanyIn
     full_name: str = Field(min_length=2, max_length=255)
     title: str | None = Field(default=None, max_length=255)
@@ -65,6 +82,8 @@ class ProspectRecord(BaseModel):
     email: str | None = Field(default=None, max_length=320)
     linkedin_url: str | None = Field(default=None, max_length=2048)
     region: str | None = Field(default=None, max_length=160)
+    city: str | None = Field(default=None, max_length=160)
+    profiles: list[ProfileLink] = Field(default_factory=list, max_length=8)
     icp_score: int | None = Field(default=None, ge=0, le=100)
     icp_rationale: str | None = Field(default=None, max_length=500)
     evidence: list[EvidenceLink] = Field(default_factory=list, max_length=12)
@@ -90,7 +109,7 @@ class ProspectRecord(BaseModel):
             raise ValueError(f"unknown status {value!r}; expected one of {', '.join(STATUSES)}")
         return value
 
-    @field_validator("phone", "title", "region", "icp_rationale", "notes", "full_name")
+    @field_validator("phone", "title", "region", "city", "icp_rationale", "notes", "full_name")
     @classmethod
     def strip_blank(cls, value: str | None) -> str | None:
         if value is None:
@@ -106,7 +125,7 @@ class DepositFile(BaseModel):
     record rejects that record, not the whole batch.
     """
 
-    schema_version: Literal[1]
+    schema_version: Literal[1, 2]
     source: str = Field(default="codex", max_length=16)
     batch_note: str | None = Field(default=None, max_length=1000)
     request_id: int | None = Field(default=None, ge=1)
@@ -117,7 +136,7 @@ class DepositFile(BaseModel):
 class DepositEnvelope(BaseModel):
     """Lenient envelope: records stay raw so they can fail individually."""
 
-    schema_version: Literal[1]
+    schema_version: Literal[1, 2]
     source: str = Field(default="codex", max_length=16)
     batch_note: str | None = Field(default=None, max_length=1000)
     request_id: int | None = Field(default=None, ge=1)
@@ -201,6 +220,28 @@ def _enrich(session: Session, existing: Prospect, record: ProspectRecord) -> boo
     if new_links and len(existing.evidence) < 12:
         existing.evidence = existing.evidence + new_links[: 12 - len(existing.evidence)]
         filled.append("evidence")
+
+    known_profiles = {link.get("url", "").rstrip("/") for link in existing.profiles}
+    new_profiles = [
+        {"label": link.label, "url": link.url}
+        for link in record.profiles
+        if link.url.rstrip("/") not in known_profiles
+    ]
+    if new_profiles and len(existing.profiles) < 8:
+        existing.profiles = existing.profiles + new_profiles[: 8 - len(existing.profiles)]
+        filled.append("profiles")
+
+    # Rapport intel: never overwrite the human's notes — append to the log.
+    if record.notes:
+        if not existing.notes:
+            existing.notes = record.notes
+            filled.append("notes")
+        elif record.notes.strip() not in existing.notes:
+            session.add(Activity(
+                prospect_id=existing.id, kind="note", body=f"[research] {record.notes}",
+            ))
+            filled.append("research note")
+
     if filled:
         session.add(Activity(
             prospect_id=existing.id, kind="system",
@@ -231,6 +272,19 @@ def ingest_records(
                 f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
             )
             _reject(summary, raw, f"record {index}: {problems}")
+            continue
+
+        # Enrichment record: targets a specific existing prospect by id.
+        if record.prospect_id is not None:
+            target = session.get(Prospect, record.prospect_id)
+            if target is None:
+                _reject(summary, raw,
+                        f"record {index}: prospect_id {record.prospect_id} does not exist in the CRM")
+                continue
+            if _enrich(session, target, record):
+                summary.enriched += 1
+            else:
+                summary.duplicates += 1
             continue
 
         company = _get_or_create_company(session, record.company)
@@ -271,6 +325,8 @@ def ingest_records(
             email=record.email,
             linkedin_url=record.linkedin_url,
             region=record.region or company.region,
+            city=record.city,
+            profiles=[link.model_dump() for link in record.profiles],
             icp_score=record.icp_score,
             icp_rationale=record.icp_rationale,
             evidence=[link.model_dump() for link in record.evidence],
@@ -456,6 +512,14 @@ def dry_run_deposit(session: Session, content: str) -> list[tuple[int, str, str]
                 f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
             )
             results.append((index, "invalid", problems))
+            continue
+        if record.prospect_id is not None:
+            target = session.get(Prospect, record.prospect_id)
+            if target is None:
+                results.append((index, "invalid",
+                                f"prospect_id {record.prospect_id} does not exist in the CRM"))
+            else:
+                results.append((index, "enrich", f"would deepen {target.full_name} (#{target.id})"))
             continue
         domain = normalize_domain(record.company.domain or record.company.website)
         company = find_company(session, domain=domain, name=record.company.name)

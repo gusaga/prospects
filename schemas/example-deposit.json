@@ -1,8 +1,8 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "source": "codex",
   "request_id": 1,
-  "batch_note": "Example deposit showing every field. Two records: one complete, one minimal.",
+  "batch_note": "Example deposit showing every field. Three records: complete discovery, minimal discovery, and a stage-2 enrichment record.",
   "shortfall_reasons": [
     "Example only: requested 3 but delivered 2 — third candidate's role could not be verified on any public page"
   ],
@@ -38,6 +38,20 @@
       "icp_rationale": "Adjacent title at a Texas homebuilder; size unconfirmed",
       "evidence": [
         { "url": "https://bluestemhomes.example/about", "note": "about page names Casey Morgan as Division President" }
+      ]
+    },
+    {
+      "prospect_id": 12,
+      "company": { "name": "Hill Country Communities", "domain": "hillcountrycommunities.example" },
+      "full_name": "Jordan Rivera",
+      "phone": "(512) 555-0134",
+      "city": "Austin",
+      "profiles": [
+        { "label": "Facebook", "url": "https://facebook.example/hillcountry-jordan" }
+      ],
+      "notes": "Quoted in the May 2026 Austin Business Journal piece on their new 400-lot community; spoke at TEXO panel on entitlement delays.",
+      "evidence": [
+        { "url": "https://news.example/abj-hill-country", "note": "ABJ article quoting Jordan Rivera, confirms Austin base" }
       ]
     }
   ]

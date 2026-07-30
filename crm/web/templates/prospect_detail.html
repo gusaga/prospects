@@ -12,6 +12,10 @@
   <div class="page-actions detail-badges">
     {{ m.score_badge(p) }}
     {{ m.status_pill(p) }}
+    <form method="post" action="/requests/enrich">
+      <input type="hidden" name="prospect_id" value="{{ p.id }}">
+      <button class="btn" title="Create a stage-2 research brief for this person: direct phone, LinkedIn, city, rapport intel">🔎 Research deeper</button>
+    </form>
   </div>
 </div>
 
@@ -57,7 +61,17 @@
           {% if p.linkedin_url %}<a class="icon-btn" href="{{ p.linkedin_url }}" target="_blank" rel="noopener" title="Open profile">↗</a>{% endif %}
         </span>
       </label>
+      {% if p.profiles %}
+      <div class="fieldrow-static"><span class="muted">Profiles</span>
+        <span>
+          {% for link in p.profiles %}
+          <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{{ ' · ' if not loop.last }}
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
       <label>Region     <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="region" value="{{ p.region or '' }}" placeholder="{{ p.company.region or 'e.g. Texas' }}"></label>
+      <label>City       <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="city" value="{{ p.city or '' }}" placeholder="e.g. Austin"></label>
       <label>Priority
         <select data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="priority">
           {% for value, label in PRIORITIES.items() %}
