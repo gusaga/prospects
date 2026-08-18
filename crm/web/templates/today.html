@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Today — Prospecting CRM{% endblock %}
+{% block container_class %}container-wide{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Daily workspace</p>
+    <h1>Today</h1>
+    <p class="muted">Find prospects, deepen the keepers, then work the call list — notes stay on every touch.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/import">Open research</a>
+    <a class="btn btn-lime" href="/prospects?status=new">Vet new ({{ new_count }})</a>
+  </div>
+</div>
+
+{% if not icp_ready %}
+<section class="action-banner" style="margin-bottom:1rem;">
+  <div>
+    <h2>First step: define who you sell to</h2>
+    <p>Your Ideal Customer Profile drives research briefs and enrichment.
+      Still need: {{ icp_missing | join(', ') }}.</p>
+  </div>
+  <div class="action-banner-actions">
+    <a class="btn btn-primary" href="/settings">Open Settings</a>
+  </div>
+</section>
+{% endif %}
+
+<div class="dash">
+  <div class="dash-main">
+    <div class="overview-grid">
+      <article class="overview-card tone-due">
+        <span class="badge {{ 'warn' if due else 'soft' }}">
+          {% if due %}Needs follow-up{% else %}Clear{% endif %}
+        </span>
+        <h3>{{ due|length }}</h3>
+        <p>{% if due %}Due follow-ups waiting for a call and a logged note.{% else %}No overdue or due-today follow-ups.{% endif %}</p>
+      </article>
+      <article class="overview-card tone-queue">
+        <span class="badge soft">Call queue</span>
+        <h3>{{ queued|length }}</h3>
+        <p>{% if queued %}Queued prospects ready to dial.{% else %}Queue is empty — promote vetted prospects when ready.{% endif %}</p>
+      </article>
+      <article class="overview-card tone-done">
+        <span class="badge">Logged today</span>
+        <h3>{{ called_today }}</h3>
+        <p>Calls captured in the activity log so outreach history never disappears.</p>
+      </article>
+    </div>
+
+    <section class="action-banner">
+      <div>
+        <h2>Research &amp; deepen</h2>
+        <p class="muted">Ask the agent for ~10 new fits, import the deposit, then run enrichment on keepers before you dial.</p>
+      </div>
+      <div class="action-banner-actions">
+        <a class="btn btn-primary" href="/import">Find prospects</a>
+        <a class="btn" href="/prospects?status=new">Select keepers to enrich</a>
+      </div>
+    </section>
+
+    {% if not due and not queued %}
+    <div class="empty-state">
+      <p><strong>Nothing to call right now.</strong></p>
+      <p class="muted">Queue prospects from the <a href="/prospects">list</a>, or start a research job from the desk on the right.</p>
+    </div>
+    {% endif %}
+
+    {% if due %}
+    <section class="ops-panel">
+      <div class="ops-panel-head">
+        <h2>Due follow-ups</h2>
+        <span class="muted small">{{ due|length }} people</span>
+      </div>
+      <ul class="ops-list">
+        {% for p in due %}
+        <li class="ops-item is-due">
+          <span class="ops-check" aria-hidden="true"></span>
+          <div class="ops-main">
+            <a class="ops-title plain" href="/prospects/{{ p.id }}">{{ p.full_name }}</a>
+            <div class="ops-sub">{{ p.title or 'No title' }} · {{ p.company.name }}{% if p | region_of %} · {{ p | region_of }}{% endif %}</div>
+            <div class="ops-meta">
+              <span class="due {{ p.next_followup_on | due_class }}">{{ p.next_followup_on | due_label }}</span>
+              {{ m.status_pill(p) }}
+              {{ m.score_badge(p) }}
+              {{ m.priority_chip(p) }}
+            </div>
+          </div>
+          <div class="ops-side">
+            <div class="ops-phone">{% if p.phone %}{{ p.phone }} {{ m.copy_btn(p.phone, 'phone') }}{% else %}<span class="muted">no phone</span>{% endif %}</div>
+            {{ m.quick_actions(p) }}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+
+    {% if queued %}
+    <section class="ops-panel">
+      <div class="ops-panel-head">
+        <h2>Call queue</h2>
+        <span class="muted small">{{ queued|length }} ready</span>
+      </div>
+      <ul class="ops-list">
+        {% for p in queued %}
+        <li class="ops-item is-queued">
+          <span class="ops-check" aria-hidden="true"></span>
+          <div class="ops-main">
+            <a class="ops-title plain" href="/prospects/{{ p.id }}">{{ p.full_name }}</a>
+            <div class="ops-sub">{{ p.title or 'No title' }} · {{ p.company.name }}{% if p | region_of %} · {{ p | region_of }}{% endif %}</div>
+            <div class="ops-meta">
+              {{ m.score_badge(p) }}
+              {{ m.priority_chip(p) }}
+              {% if p.email %}<span class="small muted">{{ p.email }}</span>{% endif %}
+            </div>
+          </div>
+          <div class="ops-side">
+            <div class="ops-phone">{% if p.phone %}{{ p.phone }} {{ m.copy_btn(p.phone, 'phone') }}{% else %}<span class="muted">no phone</span>{% endif %}</div>
+            {{ m.quick_actions(p) }}
+          </div>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside class="desk" aria-label="Research desk">
+    <div class="desk-head">
+      <div class="desk-avatar" aria-hidden="true"></div>
+      <div>
+        <h2>Research desk</h2>
+        <p>Find → deepen → dial</p>
+      </div>
+    </div>
+
+    <div class="desk-chat">
+      <div class="desk-bubble user">What’s on my plate for research today?</div>
+      <div class="desk-bubble agent">
+        <strong>Status snapshot</strong>
+        <div class="desk-stat"><span>Open research jobs</span><span>{{ open_requests|length }}</span></div>
+        <div class="desk-stat"><span>Deposits waiting</span><span>{{ inbox_count }}</span></div>
+        <div class="desk-stat"><span>New to vet</span><span>{{ new_count }}</span></div>
+        {% if open_requests %}
+        <div style="margin-top:.55rem;">
+          {% for item in open_requests[:3] %}
+          <div class="small" style="margin-bottom:.45rem;">
+            <strong style="color:#fff;">R-{{ item.req.id }}</strong>
+            · {{ 'Enrich' if item.req.kind == 'enrich' else 'Find' }}
+            · {{ item.delivered }}/{{ item.req.requested_count }}
+            <div class="progress-thin"><span style="width: {{ item.pct }}%;"></span></div>
+          </div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="small" style="margin:.55rem 0 0; color:rgba(232,240,234,.75);">No open jobs. Start a find for ~10 ICP fits, then enrich keepers before calling.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="desk-chips">
+      <a class="desk-chip primary" href="/import">Find ~10 prospects</a>
+      {% if inbox_count %}
+      <form method="post" action="/import/inbox" style="display:inline; margin:0;">
+        <button class="desk-chip" type="submit">Import deposits</button>
+      </form>
+      {% endif %}
+      <a class="desk-chip" href="/prospects?status=new">Vet new</a>
+      <a class="desk-chip" href="/import">Open briefs</a>
+    </div>
+
+    <p class="desk-foot">Agent deposits land in inbox/ · outreach notes go on each prospect’s activity log</p>
+  </aside>
+</div>
+
+{% endblock %}

@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% block title %}Settings — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">ICP &amp; workspace</p>
+    <h1>Settings</h1>
+    <p class="muted">Define who you sell to. Briefs, scoring, and enrichment follow this profile — any industry.</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/import">New research request</a>
+    <a class="btn" href="/brief" target="_blank" title="Quick brief without delivery tracking">Quick brief</a>
+  </div>
+</div>
+
+{% if not icp_ready %}
+<section class="action-banner" style="margin-bottom:1rem;">
+  <div>
+    <h2>Set up your Ideal Customer Profile</h2>
+    <p>Fill the form below so research briefs know who to find.
+      Still missing: {{ icp_missing | join(', ') }}.</p>
+  </div>
+  <div class="action-banner-actions">
+    <form method="post" action="/settings/icp/example">
+      <button class="btn" type="submit">Load land/homebuilding example</button>
+    </form>
+  </div>
+</section>
+{% else %}
+<p class="muted small" style="margin-bottom:1rem;">ICP looks ready · app version {{ app_version }}</p>
+{% endif %}
+
+<div class="detail-grid" style="grid-template-columns: 1.5fr 1fr;">
+  <form method="post" action="/settings/icp" class="card">
+    <h2>Ideal customer profile</h2>
+    <p class="muted small">Write this the way you would brief a researcher. The scrapers and agent do not assume an industry — they follow what you write here.</p>
+    <div class="fieldlist">
+      <label>What you sell
+        <input name="product" value="{{ icp.product }}"
+               placeholder="e.g. Scheduling software for dental clinics">
+      </label>
+      <label>Target industry
+        <input name="industry" value="{{ icp.industry }}"
+               placeholder="e.g. Multi-location dental practices">
+      </label>
+      <label>Company size
+        <input name="company_size" value="{{ icp.company_size }}"
+               placeholder="e.g. 11-50 employees">
+      </label>
+      <label>Regions <span class="muted">(one per line)</span>
+        <textarea name="regions" rows="3"
+                  placeholder="Texas&#10;Arizona&#10;Florida">{{ icp.regions | join('\n') }}</textarea>
+      </label>
+      <label>Region note
+        <input name="region_note" value="{{ icp.region_note }}"
+               placeholder="Optional focus order or neighbors that also count">
+      </label>
+      <label>Target titles <span class="muted">(best first, one per line)</span>
+        <textarea name="target_titles" rows="3"
+                  placeholder="VP of Operations&#10;Clinic Owner">{{ icp.target_titles | join('\n') }}</textarea>
+      </label>
+      <label>Adjacent titles <span class="muted">(also count)</span>
+        <textarea name="adjacent_titles" rows="3"
+                  placeholder="Director of Operations&#10;Regional Manager">{{ icp.adjacent_titles | join('\n') }}</textarea>
+      </label>
+      <label>Account rule <span class="muted">(who is in / who is out)</span>
+        <textarea name="account_rule" rows="4"
+                  placeholder="Include owner-operated clinics. Exclude DSOs that only buy through corporate procurement, and exclude dental suppliers.">{{ icp.account_rule }}</textarea>
+      </label>
+      <label>Pain points <span class="muted">(one per line)</span>
+        <textarea name="pain_points" rows="2"
+                  placeholder="No-shows&#10;Staff juggling three tools">{{ icp.pain_points | join('\n') }}</textarea>
+      </label>
+      <label>Extra notes
+        <textarea name="notes" rows="2"
+                  placeholder="Anything else a researcher should know">{{ icp.notes }}</textarea>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary">Save ICP</button>
+      <button class="btn" formaction="/settings/icp/example" formmethod="post"
+              type="submit"
+              onclick="return confirm('Replace the form with the land/homebuilding example? You can edit afterward.')">
+        Load example ICP
+      </button>
+    </div>
+  </form>
+
+  <section class="card">
+    <h2>How this drives the product</h2>
+    <ol class="small" style="padding-left:1.1rem; line-height:1.7;">
+      <li><strong>Research briefs</strong> paste your ICP into a prompt for Codex (or any agent).</li>
+      <li><strong>Local enricher</strong> searches the public web using name + company + city — not a fixed industry database.</li>
+      <li><strong>Network map</strong> flags accounts missing your target titles.</li>
+      <li><strong>Scoring</strong> in briefs uses your titles, regions, and account rule.</li>
+    </ol>
+
+    <h2 style="margin-top:1.2rem;">Database</h2>
+    <p style="margin:.2rem 0 .7rem;">
+      <a class="btn" href="/homes">Switch or start a list</a>
+    </p>
+    {% if crm_home %}
+    <div class="fieldrow-static"><span class="muted">CRM home</span><span class="mono small">{{ crm_home }}</span></div>
+    {% else %}
+    <p class="muted small">Data is inside the git repo. Prefer a separate home —
+      <a href="/homes">choose a Documents list</a>.</p>
+    {% endif %}
+    <div class="fieldrow-static"><span class="muted">Data folder</span><span class="mono small">{{ data_dir }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Database file</span><span class="mono small">{{ db_path }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Inbox</span><span class="mono small">{{ inbox_dir }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Last backup</span><span class="mono small">{{ backup_name or 'none yet' }}</span></div>
+    <div class="fieldrow-static"><span class="muted">Backups kept in</span><span class="mono small">{{ backup_dir }}</span></div>
+    <form method="post" action="/settings/backup" style="margin-top:.6rem;">
+      <button class="btn">Back up now</button>
+    </form>
+    <p class="muted small" style="margin-top:.8rem;">A backup is also taken automatically once a day when
+    the app starts. To restore one, stop the app and copy the backup file over
+    your <span class="mono">crm.db</span> (see path above).</p>
+
+    <h2>The research loop</h2>
+    <ol class="small" style="padding-left:1.1rem; line-height:1.7;">
+      <li>Edit the ICP here and <strong>Save</strong>.</li>
+      <li>Create a <a href="/import">research request</a> and paste its brief into a Codex task.</li>
+      <li>The agent researches, self-checks with <span class="mono">crm validate</span>, and deposits into <span class="mono">inbox/</span>.</li>
+      <li>The <a href="/import">Import page</a> tracks delivered-vs-requested, dedupes, and explains rejects.</li>
+      <li>Queue the good ones and start dialing from <a href="/">Today</a>.</li>
+    </ol>
+
+    <p class="muted small" style="margin-top:1rem;">
+      Sharing: clone from GitHub (see README). Docker is optional
+      (<span class="mono">DOCKER.md</span>).
+    </p>
+  </section>
+</div>
+
+{% endblock %}

@@ -1,0 +1,406 @@
+{
+  "$defs": {
+    "CompanyIn": {
+      "properties": {
+        "name": {
+          "maxLength": 255,
+          "minLength": 1,
+          "title": "Name",
+          "type": "string"
+        },
+        "domain": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Domain"
+        },
+        "website": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Website"
+        },
+        "industry": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Industry"
+        },
+        "size_band": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Size Band"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "title": "CompanyIn",
+      "type": "object"
+    },
+    "EvidenceLink": {
+      "properties": {
+        "url": {
+          "maxLength": 2048,
+          "minLength": 10,
+          "title": "Url",
+          "type": "string"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "maxLength": 300,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "title": "EvidenceLink",
+      "type": "object"
+    },
+    "ProfileLink": {
+      "properties": {
+        "label": {
+          "maxLength": 40,
+          "minLength": 1,
+          "title": "Label",
+          "type": "string"
+        },
+        "url": {
+          "maxLength": 2048,
+          "minLength": 10,
+          "title": "Url",
+          "type": "string"
+        }
+      },
+      "required": [
+        "label",
+        "url"
+      ],
+      "title": "ProfileLink",
+      "type": "object"
+    },
+    "ProspectRecord": {
+      "description": "One prospect as deposited by the research agent (or a CSV row).\n\n`prospect_id` marks an enrichment record: it targets that existing\nprospect directly instead of being matched by company + name.",
+      "properties": {
+        "prospect_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Prospect Id"
+        },
+        "company": {
+          "$ref": "#/$defs/CompanyIn"
+        },
+        "full_name": {
+          "maxLength": 255,
+          "minLength": 2,
+          "title": "Full Name",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "maxLength": 255,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Title"
+        },
+        "phone": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Phone"
+        },
+        "email": {
+          "anyOf": [
+            {
+              "maxLength": 320,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Email"
+        },
+        "linkedin_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Linkedin Url"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Region"
+        },
+        "city": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "City"
+        },
+        "photo_url": {
+          "anyOf": [
+            {
+              "maxLength": 2048,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Photo Url"
+        },
+        "profiles": {
+          "items": {
+            "$ref": "#/$defs/ProfileLink"
+          },
+          "maxItems": 8,
+          "title": "Profiles",
+          "type": "array"
+        },
+        "icp_score": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icp Score"
+        },
+        "icp_rationale": {
+          "anyOf": [
+            {
+              "maxLength": 500,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Icp Rationale"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/EvidenceLink"
+          },
+          "maxItems": 12,
+          "title": "Evidence",
+          "type": "array"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "maxLength": 4000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "status": {
+          "default": "new",
+          "title": "Status",
+          "type": "string"
+        },
+        "priority": {
+          "default": 2,
+          "maximum": 3,
+          "minimum": 1,
+          "title": "Priority",
+          "type": "integer"
+        },
+        "next_followup_on": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Next Followup On"
+        }
+      },
+      "required": [
+        "company",
+        "full_name"
+      ],
+      "title": "ProspectRecord",
+      "type": "object"
+    }
+  },
+  "description": "Versioned envelope the research agent writes into inbox/.\n\nThis strict model is the published contract (schemas/*.json is generated\nfrom it). Ingestion itself uses DepositEnvelope below so that one bad\nrecord rejects that record, not the whole batch.",
+  "properties": {
+    "schema_version": {
+      "enum": [
+        1,
+        2,
+        3
+      ],
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "source": {
+      "default": "codex",
+      "maxLength": 16,
+      "title": "Source",
+      "type": "string"
+    },
+    "batch_note": {
+      "anyOf": [
+        {
+          "maxLength": 1000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Batch Note"
+    },
+    "request_id": {
+      "anyOf": [
+        {
+          "minimum": 1,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Request Id"
+    },
+    "shortfall_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 30,
+      "title": "Shortfall Reasons",
+      "type": "array"
+    },
+    "prospects": {
+      "items": {
+        "$ref": "#/$defs/ProspectRecord"
+      },
+      "maxItems": 500,
+      "minItems": 1,
+      "title": "Prospects",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "prospects"
+  ],
+  "title": "DepositFile",
+  "type": "object"
+}

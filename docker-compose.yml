@@ -1,0 +1,31 @@
+# Local Prospecting CRM — optional Docker packaging (prefer GitHub + Python).
+#
+# First time:
+#   docker compose up -d --build
+# Open http://127.0.0.1:8765  → Settings → fill your ICP
+#
+# Prefer cloning the repo when you want to improve the code (see README).
+
+services:
+  crm:
+    image: ghcr.io/gusaga/prospects:latest
+    build: .
+    container_name: prospects-crm
+    ports:
+      - "8765:8765"
+    environment:
+      CRM_HOST: "0.0.0.0"
+      CRM_PORT: "8765"
+      CRM_DATA_DIR: /app/data
+      CRM_INBOX_DIR: /app/inbox
+      CRM_BACKUP_DIR: /app/backups
+    volumes:
+      - crm-data:/app/data
+      - crm-inbox:/app/inbox
+      - crm-backups:/app/backups
+    restart: unless-stopped
+
+volumes:
+  crm-data:
+  crm-inbox:
+  crm-backups:

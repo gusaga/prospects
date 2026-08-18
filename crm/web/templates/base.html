@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Prospecting CRM{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23163528'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%238fd94a'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Prospecting CRM</span>
+    </a>
+    <a class="home-chip" href="/homes" title="Switch calling list">{{ current_home_label() }}</a>
+    <nav>
+      <a href="/" class="{{ 'active' if request.url.path == '/' }}">Today</a>
+      <a href="/prospects" class="{{ 'active' if request.url.path.startswith('/prospects') }}">Prospects</a>
+      <a href="/board" class="{{ 'active' if request.url.path.startswith('/board') }}">Board</a>
+      <a href="/network" class="{{ 'active' if request.url.path.startswith('/network') }}">Network</a>
+      <a href="/import" class="{{ 'active' if request.url.path.startswith('/import') }}">Research</a>
+      <a href="/stats" class="{{ 'active' if request.url.path.startswith('/stats') }}">Stats</a>
+      <a href="/settings" class="{{ 'active' if request.url.path.startswith('/settings') }}">Settings</a>
+    </nav>
+    <a class="btn btn-primary" href="/prospects/new">Add prospect</a>
+  </header>
+
+  <main class="container {% block container_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  {% if request.query_params.get('toast') %}
+  <script>window.__initialToast = {{ request.query_params.get('toast') | tojson }};</script>
+  {% endif %}
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

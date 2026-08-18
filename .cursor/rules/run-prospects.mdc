@@ -1,0 +1,52 @@
+---
+description: When starting or running the Prospecting CRM, ask which data home to use
+alwaysApply: true
+---
+
+# Running the Prospecting CRM — choose a data home
+
+When the user asks to **run**, **start**, **open**, or **launch** the CRM
+(prospects / prospecting CRM), do **not** start it against a database blindly.
+
+## 1. Prefer the list picker
+
+Day-to-day launch is **`run-live.bat`**, which starts
+`python -m crm serve --open --port 8765 --pick-home`. The browser opens a
+home screen under `Documents\`: existing `ProspectingCRM*` folders, plus
+**Start a new list**.
+
+If they ask you to start it from chat, check port **8765** first. If it is
+free, start with `--pick-home` so they choose in the browser — do not assume
+the live list, and **never** create a database inside the git checkout.
+
+Only skip the picker when they explicitly want a **specific home already
+named** — set `CRM_HOME` to that folder and start without `--pick-home`.
+
+## 2. After a list is open
+
+- Confirm the path in **Settings** (or `python -m crm status` with the same
+  `CRM_HOME`).
+- If the app is already running on port 8765, say so; don’t assume a second
+  copy is safe without checking.
+- Remind first-time / empty ICP users: open **Settings**, fill who they sell
+  to (or **Load example ICP**), then use Research.
+
+## 3. Brand-new clone (no .venv yet)
+
+If `.venv` is missing, point them to **`setup.bat`** (Windows) or:
+
+```text
+python -m venv .venv
+.venv\Scripts\python.exe -m pip install -e .
+```
+
+Do not invent cloud deploy steps. Local only.
+
+## 4. Never
+
+- Never wipe or replace `Documents\ProspectingCRM\data\crm.db` without an
+  explicit ask.
+- Never run `init-home` in a way that overwrites an existing live DB
+  (`init-home` already refuses to overwrite — keep it that way).
+- Never treat the git checkout as a calling list. Data belongs in
+  `Documents\ProspectingCRM*`, not in `<repo>\data\`.

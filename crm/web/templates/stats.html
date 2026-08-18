@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Stats — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <h1>Stats</h1>
+    <p class="muted">{{ total }} prospects · {{ active }} active · {{ with_phone }} with a direct phone · {{ with_email }} with an email</p>
+  </div>
+</div>
+
+<div class="detail-grid">
+  <section class="card">
+    <h2>By status</h2>
+    {% for slug, label, count in by_status %}
+    <div class="stat-row">
+      <span class="stat-label">{{ label }}</span>
+      <div class="stat-bar-track"><div class="stat-bar status-{{ slug }}" style="width: {{ (count / max_status * 100) | round(1) }}%"></div></div>
+      <span class="stat-count">{{ count }}</span>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>By region</h2>
+    {% for region, count in by_region %}
+    <div class="stat-row">
+      <span class="stat-label">{{ region | truncate(24) }}</span>
+      <div class="stat-bar-track"><div class="stat-bar stat-bar-region" style="width: {{ (count / max_region * 100) | round(1) }}%"></div></div>
+      <span class="stat-count">{{ count }}</span>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="card">
+    <h2>By source</h2>
+    {% for source, count in by_source %}
+    <div class="stat-row">
+      <span class="stat-label">{{ source }}</span>
+      <span class="stat-count">{{ count }}</span>
+    </div>
+    {% endfor %}
+    <p class="muted small" style="margin-top:1rem;">Phone coverage is the number to watch — a prospect
+    without a direct phone isn't cold-callable yet.</p>
+  </section>
+</div>
+
+{% endblock %}

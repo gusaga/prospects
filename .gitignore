@@ -1,0 +1,19 @@
+# Never commit calling lists. They live in Documents\ProspectingCRM*
+# (created by run-live.bat / the in-app list picker), not in this repo.
+data/
+inbox/
+backups/
+exports/
+*.db
+*.db-shm
+*.db-wal
+
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+.pytest_tmp/
+*.py[cod]
+*.egg-info/
+.cache/
+debug.db

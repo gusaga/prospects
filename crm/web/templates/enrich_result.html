@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Enricher results — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Local enricher</p>
+    <h1>Enricher results</h1>
+    <p class="muted">
+      Public web search + scrape for R-{{ req.id }} ·
+      {{ with_facts }} with new facts · {{ without_facts }} with nothing new
+    </p>
+  </div>
+  <div class="page-actions">
+    <a class="btn btn-primary" href="/import">Back to Research</a>
+    <a class="btn" href="/requests/{{ req.id }}/brief" target="_blank">Open Codex brief</a>
+  </div>
+</div>
+
+{% if deposit_path %}
+<div class="action-banner">
+  <div>
+    <h2>Deposit written</h2>
+    <p class="muted"><span class="mono">{{ deposit_path }}</span>{% if imported %} · imported into the CRM{% endif %}</p>
+  </div>
+</div>
+{% else %}
+<div class="action-banner">
+  <div>
+    <h2>No deposit written</h2>
+    <p class="muted">The enricher searched the public web but found no new phone, email, LinkedIn, city, or notes to add. Try the Codex brief for harder cases, or confirm the company website is correct.</p>
+  </div>
+</div>
+{% endif %}
+
+<section class="ops-panel">
+  <div class="ops-panel-head">
+    <h2>Per prospect</h2>
+  </div>
+  <ul class="ops-list">
+    {% for item in items %}
+    <li class="ops-item">
+      <span class="ops-check" aria-hidden="true"></span>
+      <div class="ops-main">
+        <a class="ops-title plain" href="/prospects/{{ item.prospect_id }}">{{ item.full_name }}</a>
+        <div class="ops-sub">
+          {{ item.company_name }} ·
+          {{ item.search_hits }} search hits{% if item.search_backend %} ({{ item.search_backend }}){% endif %} ·
+          {{ item.pages_fetched }} pages fetched
+        </div>
+        <div class="ops-meta">
+          {% if item.record %}
+            {% for field in ['phone', 'email', 'linkedin_url', 'city', 'notes', 'photo_url'] %}
+              {% if field in item.record %}
+              <span class="pill status-meeting">{{ field }}</span>
+              {% endif %}
+            {% endfor %}
+          {% else %}
+            <span class="muted small">{{ item.shortfalls[0] if item.shortfalls else 'nothing new' }}</span>
+          {% endif %}
+        </div>
+        {% if item.record and item.record.get('evidence') %}
+        <ul class="evidence" style="margin-top:0.5rem">
+          {% for link in item.record.evidence[:8] %}
+          <li>
+            <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url }}</a>
+            {% if link.note %}<span class="muted small"> — {{ link.note }}</span>{% endif %}
+          </li>
+          {% endfor %}
+        </ul>
+        {% elif item.search_sample %}
+        <ul class="evidence" style="margin-top:0.5rem">
+          <li class="muted small">Search saw (not deposited):</li>
+          {% for url in item.search_sample[:5] %}
+          <li><a href="{{ url }}" target="_blank" rel="noopener">{{ url }}</a></li>
+          {% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+</section>
+
+{% endblock %}

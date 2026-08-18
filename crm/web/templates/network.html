@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Network atlas — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Account coverage</p>
+    <h1>Network atlas</h1>
+    <p class="muted">Accounts ranked by coverage gaps — open a spider map to multi-thread before you dial.</p>
+  </div>
+</div>
+
+<section class="card network-atlas-card">
+  <form class="network-filters" id="network-filters">
+    <label>Region
+      <select name="region" id="network-region">
+        <option value="">All regions</option>
+        {% for r in regions %}
+        <option value="{{ r }}">{{ r }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status" id="network-status">
+        <option value="">Open (default)</option>
+        {% for slug, label in statuses.items() %}
+          {% if slug not in closed_statuses %}
+          <option value="{{ slug }}">{{ label }}</option>
+          {% endif %}
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary">Apply</button>
+  </form>
+
+  <div
+    class="network-map network-atlas"
+    id="atlas-root"
+    data-network-map
+    data-scope="atlas"
+  >
+    <div class="spider-empty" data-spider-empty hidden>No accounts match these filters.</div>
+    <div class="atlas-list" data-atlas-list></div>
+  </div>
+</section>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/network-map.js"></script>
+<script>
+(function () {
+  var form = document.getElementById("network-filters");
+  var root = document.getElementById("atlas-root");
+  if (!form || !root || !window.NetworkMap) return;
+  form.addEventListener("submit", function (e) {
+    e.preventDefault();
+    root.dataset.region = document.getElementById("network-region").value || "";
+    root.dataset.status = document.getElementById("network-status").value || "";
+    root.querySelector("[data-atlas-list]").innerHTML = "";
+    window.NetworkMap.mount(root);
+  });
+})();
+</script>
+{% endblock %}

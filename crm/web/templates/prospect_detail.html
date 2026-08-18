@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ p.full_name }} — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head prospect-head">
+  <div class="prospect-identity">
+    {% if p.photo_path %}
+    <img class="prospect-photo" src="/photos/{{ p.id }}" alt="Photo of {{ p.full_name }}">
+    {% else %}
+    <div class="prospect-photo prospect-photo-empty" aria-hidden="true">{{ p.full_name[:1] }}</div>
+    {% endif %}
+    <div>
+      <div class="breadcrumb"><a href="/prospects">Prospects</a> /</div>
+      <h1>{{ p.full_name }}</h1>
+      <p class="muted">{{ p.title or 'No title' }} · {{ p.company.name }}{% if p | region_of %} · {{ p | region_of }}{% endif %}</p>
+    </div>
+  </div>
+  <div class="page-actions detail-badges">
+    {{ m.score_badge(p) }}
+    {{ m.status_pill(p) }}
+    {% if p.status not in CLOSED_STATUSES %}
+    <form method="post" action="/requests/enrich/run" class="enrich-run-form">
+      <input type="hidden" name="prospect_id" value="{{ p.id }}">
+      <button type="submit" class="btn btn-lime" title="Search and scrape the public web now (30–90 seconds)">Run enricher</button>
+    </form>
+    <form method="post" action="/requests/enrich">
+      <input type="hidden" name="prospect_id" value="{{ p.id }}">
+      <button type="submit" class="btn" title="Open a Codex brief — does not search the web">Open brief</button>
+    </form>
+    {% endif %}
+  </div>
+</div>
+
+<div class="callbar">
+  <form method="post" action="/prospects/{{ p.id }}/action" class="callbar-form">
+    <div class="callbar-buttons">
+      <button name="action" value="no_answer" class="btn" title="Sets a retry in 2 days">✗ No answer</button>
+      <button name="action" value="conversation" class="btn btn-good">✓ Conversation</button>
+      <button name="action" value="queue" class="btn">＋ Queue</button>
+      <button name="action" value="follow_up" class="btn">↻ Follow-up</button>
+      <button name="action" value="meeting" class="btn btn-good">📅 Meeting booked</button>
+      <button name="action" value="not_fit" class="btn btn-dim">Not a fit</button>
+      <button name="action" value="do_not_contact" class="btn btn-dim">Do not contact</button>
+    </div>
+    <div class="callbar-extra">
+      <input type="text" name="note" placeholder="Optional note saved with the outcome…" maxlength="1000">
+      <label class="muted small">on <input type="date" name="when" title="Optional date for the follow-up/retry"></label>
+    </div>
+  </form>
+</div>
+
+<section class="card photo-card">
+  <h2>Photo</h2>
+  <p class="muted small">A face helps you recognize them on a call and remember personal context. Saved locally under data/photos/.</p>
+  <form method="post" action="/prospects/{{ p.id }}/photo" enctype="multipart/form-data" class="photo-form">
+    <label class="muted small">Image URL
+      <input type="url" name="photo_url" placeholder="https://…/headshot.jpg">
+    </label>
+    <label class="muted small">Or upload a file
+      <input type="file" name="photo_file" accept="image/jpeg,image/png,image/webp,image/gif">
+    </label>
+    <div class="page-actions">
+      <button class="btn btn-primary" type="submit">Save photo</button>
+      {% if p.photo_path %}
+      <button class="btn btn-dim" type="submit" name="clear" value="1">Remove photo</button>
+      {% endif %}
+    </div>
+  </form>
+</section>
+
+<div class="detail-grid">
+  <section class="card">
+    <h2>Contact</h2>
+    <div class="fieldlist">
+      <label>Name       <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="full_name" value="{{ p.full_name }}"></label>
+      <label>Title      <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="title" value="{{ p.title or '' }}"></label>
+      <label>Phone
+        <span class="input-row">
+          <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="phone" value="{{ p.phone or '' }}" placeholder="add a direct line">
+          {{ m.copy_btn(p.phone, 'phone') }}
+        </span>
+      </label>
+      <label>Email
+        <span class="input-row">
+          <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="email" value="{{ p.email or '' }}" placeholder="add an email">
+          {{ m.copy_btn(p.email, 'email') }}
+        </span>
+      </label>
+      <label>LinkedIn
+        <span class="input-row">
+          <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="linkedin_url" value="{{ p.linkedin_url or '' }}" placeholder="https://linkedin.com/in/…">
+          {% if p.linkedin_url %}<a class="icon-btn" href="{{ p.linkedin_url }}" target="_blank" rel="noopener" title="Open profile">↗</a>{% endif %}
+        </span>
+      </label>
+      {% if p.profiles %}
+      <div class="fieldrow-static"><span class="muted">Profiles</span>
+        <span>
+          {% for link in p.profiles %}
+          <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>{{ ' · ' if not loop.last }}
+          {% endfor %}
+        </span>
+      </div>
+      {% endif %}
+      <label>Region     <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="region" value="{{ p.region or '' }}" placeholder="{{ p.company.region or 'e.g. Texas' }}"></label>
+      <label>City       <input data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="city" value="{{ p.city or '' }}" placeholder="e.g. Austin"></label>
+      <label>Priority
+        <select data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="priority">
+          {% for value, label in PRIORITIES.items() %}
+          <option value="{{ value }}" {{ 'selected' if p.priority == value }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Status
+        <select data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="status">
+          {% for slug, label in STATUSES.items() %}
+          <option value="{{ slug }}" {{ 'selected' if p.status == slug }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>Next follow-up <input type="date" data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="next_followup_on" value="{{ p.next_followup_on.isoformat() if p.next_followup_on else '' }}"></label>
+      <div class="fieldrow-static">
+        <span class="muted">Last contacted</span><span>{{ p.last_contacted_at | fmt_date or 'never' }}</span>
+      </div>
+      <div class="fieldrow-static">
+        <span class="muted">Added</span><span>{{ p.created_at | fmt_date }} ({{ p.source }})</span>
+      </div>
+    </div>
+
+    <h2>ICP fit</h2>
+    <div class="fieldlist">
+      <label>Score (0–100) <input type="number" min="0" max="100" data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="icp_score" value="{{ p.icp_score if p.icp_score is not none else '' }}"></label>
+      <label>Why <textarea rows="2" data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="icp_rationale" placeholder="One line on why this prospect fits">{{ p.icp_rationale or '' }}</textarea></label>
+    </div>
+
+    <h2>Notes</h2>
+    <textarea rows="4" class="notes-box" data-autosave data-entity="prospect" data-id="{{ p.id }}" data-field="notes"
+              placeholder="Working notes (the call log below is the permanent history)">{{ p.notes or '' }}</textarea>
+  </section>
+
+  <section class="card">
+    <h2>Company</h2>
+    <div class="fieldlist">
+      <label>Name     <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="name" value="{{ p.company.name }}"></label>
+      <label>Domain   <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="domain" value="{{ p.company.domain or '' }}"></label>
+      <label>Website
+        <span class="input-row">
+          <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="website" value="{{ p.company.website or '' }}">
+          {% if p.company.website %}<a class="icon-btn" href="{{ p.company.website }}" target="_blank" rel="noopener" title="Open website">↗</a>{% endif %}
+        </span>
+      </label>
+      <label>Industry <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="industry" value="{{ p.company.industry or '' }}"></label>
+      <label>Size     <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="size_band" value="{{ p.company.size_band or '' }}"></label>
+      <label>Region   <input data-autosave data-entity="company" data-id="{{ p.company.id }}" data-field="region" value="{{ p.company.region or '' }}"></label>
+    </div>
+
+    {% if colleagues %}
+    <h2>Also at {{ p.company.name }}</h2>
+    <ul class="colleagues">
+      {% for c in colleagues %}
+      <li><a href="/prospects/{{ c.id }}">{{ c.full_name }}</a> <span class="muted small">{{ c.title or '' }}</span> {{ m.status_pill(c) }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+
+    <h2>Network</h2>
+    <p class="muted small">Company spider map — who else to call, buying-role hints, and coverage gaps before you dial.</p>
+    <div
+      class="network-map"
+      data-network-map
+      data-scope="company"
+      data-company-id="{{ p.company.id }}"
+      data-focus-prospect-id="{{ p.id }}"
+    >
+      <div class="network-map-legend" aria-hidden="true">
+        <span><i class="swatch role-economic"></i>Economic buyer</span>
+        <span><i class="swatch role-influencer"></i>Influencer</span>
+        <span><i class="swatch role-coach"></i>Specialist / coach</span>
+        <span><i class="swatch role-contact"></i>Contact</span>
+        <span><i class="swatch focus"></i>Focus</span>
+      </div>
+      <div class="network-gaps">
+        <h3>Coverage gaps</h3>
+        <div data-spider-gaps></div>
+      </div>
+      <div class="network-spider" data-spider-root>
+        <div class="spider-chips" data-spider-chips></div>
+        <div class="spider-stage" data-spider-stage></div>
+        <div class="spider-empty" data-spider-empty hidden>
+          No contacts at this company yet — add a colleague or run the enricher.
+        </div>
+      </div>
+    </div>
+    <p class="muted small"><a href="/network">Browse all accounts (atlas) →</a></p>
+
+    <h2>Evidence</h2>
+    {% if p.evidence %}
+    <ul class="evidence">
+      {% for link in p.evidence %}
+      <li>
+        <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.url | replace('https://','') | replace('http://','') | truncate(60) }}</a>
+        {% if link.note %}<span class="muted small">— {{ link.note }}</span>{% endif %}
+        <form method="post" action="/prospects/{{ p.id }}/evidence/remove" class="inline-form">
+          <input type="hidden" name="index" value="{{ loop.index0 }}">
+          <button class="icon-btn danger" title="Remove link">×</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted small">No source links yet.</p>
+    {% endif %}
+    <form method="post" action="/prospects/{{ p.id }}/evidence" class="evidence-add">
+      <input type="url" name="url" placeholder="https://… source link" required>
+      <input type="text" name="note" placeholder="what it shows (optional)">
+      <button class="btn btn-sm">Add</button>
+    </form>
+  </section>
+
+  <section class="card activity-card">
+    <h2>Activity log <span class="muted small">(append-only)</span></h2>
+    <form method="post" action="/prospects/{{ p.id }}/notes" class="note-add">
+      <textarea name="body" rows="2" placeholder="Log a call note, context, anything worth remembering…" required></textarea>
+      <button class="btn btn-primary btn-sm">Add note</button>
+    </form>
+    <ul class="timeline">
+      {% for a in activities %}
+      <li class="timeline-item kind-{{ a.kind }}">
+        <span class="timeline-dot" title="{{ a.kind }}"></span>
+        <div>
+          <div class="timeline-body">{{ a.body }}</div>
+          <div class="muted small">{{ a.created_at | fmt_date }}{{ ' · ' + a.kind if a.kind != 'note' else '' }}</div>
+        </div>
+      </li>
+      {% else %}
+      <li class="muted small">No activity yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/network-map.js"></script>
+{% endblock %}

@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Prospects — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Directory</p>
+    <h1>Prospects</h1>
+    <p class="muted"><span id="result-count">{{ count }}</span> shown · select a few to enrich</p>
+  </div>
+  <div class="page-actions">
+    <a class="btn" href="/export.csv?{{ query_string }}">Export CSV</a>
+  </div>
+</div>
+
+<form id="filters" class="filters" method="get" action="/prospects">
+  <input type="search" name="q" id="search" placeholder="Search name, company, title, notes…  ( / )"
+         value="{{ f.q }}" autocomplete="off">
+  <select name="status">
+    <option value="">Any status</option>
+    {% for slug, label in STATUSES.items() %}
+    <option value="{{ slug }}" {{ 'selected' if f.status == slug }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="region">
+    <option value="">Any region</option>
+    {% for r in regions %}
+    <option value="{{ r }}" {{ 'selected' if f.region == r }}>{{ r }}</option>
+    {% endfor %}
+  </select>
+  <select name="priority">
+    <option value="">Any priority</option>
+    {% for value, label in PRIORITIES.items() %}
+    <option value="{{ value }}" {{ 'selected' if f.priority == value|string }}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  <select name="min_score">
+    <option value="">Any score</option>
+    {% for threshold in [80, 60, 40] %}
+    <option value="{{ threshold }}" {{ 'selected' if f.min_score == threshold|string }}>≥ {{ threshold }}</option>
+    {% endfor %}
+  </select>
+  <label class="check"><input type="checkbox" name="due" value="1" {{ 'checked' if f.due }}> Due only</label>
+  <input type="hidden" name="sort" value="{{ f.sort }}">
+  <input type="hidden" name="dir" value="{{ f.dir }}">
+  <button class="btn">Filter</button>
+  {% if f.q or f.status or f.region or f.priority or f.min_score or f.due %}
+  <a class="btn btn-ghost" href="/prospects">Clear</a>
+  {% endif %}
+</form>
+
+<div id="enrich-bar" class="enrich-bar" hidden>
+  <div class="enrich-bar-copy">
+    <strong id="enrich-count">0 selected</strong>
+    <span class="muted small">
+      <strong>Run enricher</strong> searches the public web (may take 30–90 seconds — keep this tab open).
+      <strong>Open brief</strong> is only for pasting into Codex chat.
+    </span>
+  </div>
+  <div class="enrich-bar-actions">
+    <button type="button" class="btn btn-ghost" id="enrich-clear">Clear</button>
+    <form method="post" action="/requests/enrich" id="enrich-brief-form">
+      <div class="enrich-ids-brief"></div>
+      <button type="submit" class="btn" id="enrich-brief-submit" disabled title="Open a Codex-style brief — does not search the web">Open brief</button>
+    </form>
+    <form method="post" action="/requests/enrich/run" id="enrich-selected-form">
+      <div id="enrich-ids"></div>
+      <button type="submit" class="btn btn-lime" id="enrich-submit" disabled title="Search and scrape the public web now">Run enricher</button>
+    </form>
+  </div>
+</div>
+
+<div id="results">
+  {% include "_table.html" %}
+</div>
+
+{% endblock %}

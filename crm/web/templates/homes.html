@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Choose a list — Prospecting CRM</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23163528'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%238fd94a'/%3E%3C/svg%3E">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ '/' if home_ready else '/homes' }}">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>Prospecting CRM</span>
+    </a>
+    {% if home_ready %}
+    <nav>
+      <a href="/">Back to Today</a>
+    </nav>
+    {% endif %}
+  </header>
+
+  <main class="container container-homes">
+    <div class="page-head">
+      <div>
+        <p class="breadcrumb muted">Calling lists</p>
+        <h1>Which list do you want to open?</h1>
+        <p class="muted">Each list is its own folder in Documents. Opening one does not mix people with another.</p>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="action-banner" role="alert">
+      <div>
+        <h2>Could not open that list</h2>
+        <p>{{ error }}</p>
+      </div>
+    </div>
+    {% endif %}
+
+    {% if homes %}
+    <div class="home-grid">
+      {% for home in homes %}
+      <form method="post" action="/homes/open" class="home-card card{% if home.name == current_name %} is-current{% endif %}{% if home.is_default %} is-default{% endif %}">
+        <input type="hidden" name="name" value="{{ home.name }}">
+        <div class="home-card-top">
+          <h2>{{ home.label }}</h2>
+          {% if home.name == current_name %}
+          <span class="chip">Open now</span>
+          {% elif home.is_default %}
+          <span class="chip chip-soft">Usual list</span>
+          {% endif %}
+        </div>
+        <p class="home-card-meta">{{ home.people }} · {{ home.updated_label }}</p>
+        <p class="mono small muted home-card-path">{{ home.path }}</p>
+        <button class="btn btn-primary" type="submit">
+          {{ 'Stay on this list' if home.name == current_name else 'Open' }}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted" style="margin-bottom:1.2rem;">No lists in <span class="mono">{{ homes_parent }}</span> yet. Start one below.</p>
+    {% endif %}
+
+    <section class="card home-new">
+      <h2>Start a new list</h2>
+      <p class="muted small">Creates an empty folder. Your other lists stay untouched. After it opens, fill <strong>Settings</strong> with who you sell to.</p>
+      <form method="post" action="/homes/new" class="home-new-form">
+        <label class="home-new-label">Name this list
+          <input name="name" value="{{ name_value }}" required maxlength="60"
+                 placeholder="e.g. Dental clinics" autocomplete="off">
+        </label>
+        <button class="btn btn-lime" type="submit">Create and open</button>
+      </form>
+      <p class="muted small" style="margin-top:.7rem;">Saved as <span class="mono">{{ homes_parent }}\ProspectingCRM-</span><em>the name you type</em></p>
+    </section>
+  </main>
+</body>
+</html>

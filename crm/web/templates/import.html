@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% block title %}Research — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Find &amp; deepen</p>
+    <h1>Research</h1>
+    <p class="muted">Request prospects, open the agent brief, then import deposits — CSV upload still lives here too.</p>
+  </div>
+</div>
+
+{% if not icp_ready %}
+<section class="action-banner" style="margin-bottom:1rem;">
+  <div>
+    <h2>Define your ICP before requesting research</h2>
+    <p>Briefs are empty without product, titles, regions, and an account rule.
+      Missing: {{ icp_missing | join(', ') }}.</p>
+  </div>
+  <div class="action-banner-actions">
+    <a class="btn btn-primary" href="/settings">Open Settings</a>
+  </div>
+</section>
+{% endif %}
+
+<div class="detail-grid">
+  <section class="card">
+    <h2>Research requests</h2>
+    {% if open_requests %}
+    {% for item in open_requests %}
+    <div class="dupe-card">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:.5rem;">
+        <span><strong>R-{{ item.req.id }}</strong>
+          {% if item.req.kind == 'enrich' %}<span class="pill status-follow_up">Enrichment</span>
+          {% else %}<span class="pill status-queued">Discovery</span>{% endif %}
+        </span>
+        <span class="{{ 'score-hi score' if item.delivered >= item.req.requested_count else 'muted small' }}">
+          {{ item.delivered }} / {{ item.req.requested_count }} {{ 'enriched' if item.req.kind == 'enrich' else 'delivered' }}
+        </span>
+      </div>
+      <div class="muted small">
+        Opened {{ item.req.created_at | fmt_date }}
+        {%- if item.req.region_focus %} · focus: {{ item.req.region_focus }}{% endif %}
+        {%- if item.req.title_focus %} · title: {{ item.req.title_focus }}{% endif %}
+      </div>
+      {% if item.req.shortfall %}
+      <div class="small" style="margin-top:.3rem;"><strong>Agent reported:</strong>
+        <ul class="small" style="margin:.15rem 0 0; padding-left:1.1rem;">
+          {% for reason in item.req.shortfall %}<li>{{ reason }}</li>{% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+      <div class="quick-actions" style="margin-top:.45rem;">
+        <a class="btn btn-sm" href="/requests/{{ item.req.id }}/brief" target="_blank">Open brief</a>
+        {% if item.req.kind == 'enrich' %}
+        <form method="post" action="/requests/{{ item.req.id }}/run-enricher">
+          <button class="btn btn-sm btn-lime" title="Search and scrape the public web for these targets">Run enricher</button>
+        </form>
+        {% endif %}
+        <form method="post" action="/requests/{{ item.req.id }}/close">
+          <button class="btn btn-sm btn-dim">Close</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <p class="muted small">No open requests. Create one, paste the brief into a Codex task,
+    and deliveries get tracked against it here.</p>
+    {% endif %}
+    <form method="post" action="/requests" class="form-grid" style="margin-top:.5rem;">
+      <label>How many prospects <input type="number" name="count" value="10" min="1" max="100"></label>
+      <label>Region focus (optional) <input name="region_focus" placeholder="e.g. Houston metro"></label>
+      <label>Title focus (optional) <input name="title_focus" placeholder="e.g. VP of Land Development"></label>
+      <label>Extra instructions (optional) <input name="notes" placeholder="e.g. only companies with active communities"></label>
+      <div class="span2"><button class="btn btn-primary btn-sm">Create request → get brief</button></div>
+    </form>
+
+    <h2>Research inbox</h2>
+    {% if inbox_files %}
+    <p><strong>{{ inbox_files|length }} deposit{{ '' if inbox_files|length == 1 else 's' }} waiting:</strong></p>
+    <ul class="small">
+      {% for name in inbox_files %}<li class="mono">{{ name }}</li>{% endfor %}
+    </ul>
+    <form method="post" action="/import/inbox">
+      <button class="btn btn-primary">Import waiting deposits</button>
+    </form>
+    {% else %}
+    <p class="muted small">Nothing waiting. The research agent drops <span class="mono">.json</span> files into<br>
+    <span class="mono">{{ inbox_dir }}</span><br>
+    and they show up here (they're also imported automatically when you run
+    <span class="mono">python -m crm import --inbox</span>).</p>
+    {% endif %}
+
+    <h2>CSV import</h2>
+    <form method="post" action="/import/csv" enctype="multipart/form-data" class="evidence-add">
+      <input type="file" name="file" accept=".csv" required>
+      <button class="btn">Import CSV</button>
+    </form>
+    <p class="muted small">Use the same columns as the CSV export — export once to get a template.
+    Duplicates are skipped or enriched, near-matches go to review below.</p>
+
+    <h2>Recent imports</h2>
+    {% if batches %}
+    <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>When</th><th>File</th><th>New</th><th>Enriched</th><th>Dupes</th><th>Review</th><th>Rejected</th></tr></thead>
+      <tbody>
+      {% for b in batches %}
+        <tr>
+          <td><span class="muted small">{{ b.created_at | fmt_date }}</span></td>
+          <td class="mono small">{{ b.filename | truncate(28) }}</td>
+          <td>{{ b.created_count }}</td><td>{{ b.enriched_count }}</td>
+          <td>{{ b.duplicate_count }}</td><td>{{ b.review_count }}</td>
+          <td>{% if b.rejected_count %}<strong class="due overdue">{{ b.rejected_count }}</strong>{% else %}0{% endif %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <p class="muted small">No imports yet.</p>
+    {% endif %}
+  </section>
+
+  <section class="card">
+    <h2>Needs review: possible duplicates {% if dupes %}<span class="pill status-no_answer">{{ dupes|length }}</span>{% endif %}</h2>
+    {% if not dupes %}
+    <p class="muted small">Nothing to review. When an import finds a near-match (same phone/email
+    elsewhere, or a similar name at the same company), it parks the record here instead of guessing.</p>
+    {% endif %}
+    {% for d in dupes %}
+    <div class="dupe-card">
+      <div class="dupe-cols">
+        <div>
+          <div class="muted small">Incoming</div>
+          <strong>{{ d.payload.full_name }}</strong>
+          <div class="small">{{ d.payload.title or '' }}</div>
+          <div class="small muted">{{ d.payload.company.name }}</div>
+          {% if d.payload.phone %}<div class="small mono">{{ d.payload.phone }}</div>{% endif %}
+          {% if d.payload.email %}<div class="small mono">{{ d.payload.email }}</div>{% endif %}
+        </div>
+        <div>
+          <div class="muted small">Existing</div>
+          <strong><a href="/prospects/{{ d.existing_prospect.id }}">{{ d.existing_prospect.full_name }}</a></strong>
+          <div class="small">{{ d.existing_prospect.title or '' }}</div>
+          <div class="small muted">{{ d.existing_prospect.company.name }}</div>
+          {% if d.existing_prospect.phone %}<div class="small mono">{{ d.existing_prospect.phone }}</div>{% endif %}
+          {% if d.existing_prospect.email %}<div class="small mono">{{ d.existing_prospect.email }}</div>{% endif %}
+        </div>
+      </div>
+      <div class="small" style="margin:.4rem 0;"><span class="pill status-no_answer">{{ d.reason }}</span></div>
+      <form method="post" action="/dupes/{{ d.id }}" class="quick-actions">
+        <button name="resolution" value="merged" class="btn btn-sm btn-good" title="Copy anything new into the existing record">Merge into existing</button>
+        <button name="resolution" value="kept_both" class="btn btn-sm" title="They really are different people">Keep both</button>
+        <button name="resolution" value="discarded" class="btn btn-sm btn-dim">Discard incoming</button>
+      </form>
+    </div>
+    {% endfor %}
+
+    <h2>Recent rejects</h2>
+    {% if rejects %}
+    <ul class="small">
+      {% for r in rejects %}
+      <li style="margin-bottom:.4rem;">
+        <span class="mono muted">{{ r.file }}</span> — {{ r.reason | truncate(140) }}
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="muted small">Full details with the original records: <span class="mono">{{ rejects_path }}</span></p>
+    {% else %}
+    <p class="muted small">No rejected records. When validation fails, the reason lands here.</p>
+    {% endif %}
+  </section>
+</div>
+
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}How to run the enricher — Prospecting CRM{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <div>
+    <p class="breadcrumb muted">Local enricher</p>
+    <h1>Don’t open this link directly</h1>
+    <p class="muted">
+      <span class="mono">/requests/enrich/run</span> only works when the green
+      <strong>Run enricher</strong> button sends a form (POST) with selected prospects.
+      Pasting the URL in the address bar cannot start a search.
+    </p>
+  </div>
+</div>
+
+<section class="card" style="max-width:40rem;">
+  <h2>Do this instead</h2>
+  <ol>
+    <li>Go to <a href="/prospects">Prospects</a>.</li>
+    <li>Check one or more people.</li>
+    <li>Click the green <strong>Run enricher</strong> button (not “Open brief”).</li>
+    <li>Wait 30–90 seconds — keep the tab open until you see <strong>Enricher results</strong>.</li>
+  </ol>
+  <p class="muted small">
+    If you still get “Not Found”, the CRM app needs a restart so it loads the new enricher route:
+    stop the terminal running the app, then start it again with
+    <span class="mono">python -m crm</span>.
+  </p>
+  <div class="page-actions" style="margin-top:1rem;">
+    <a class="btn btn-primary" href="/prospects">Go to Prospects</a>
+  </div>
+</section>
+
+{% endblock %}

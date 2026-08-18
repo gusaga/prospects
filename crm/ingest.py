@@ -1,0 +1,575 @@
+"""The deposit pipeline: validate -> dedupe -> insert/enrich/park/reject.
+
+Used by every way records enter the system: JSON deposits from the research
+agent, CSV imports, and manual adds. Every rejected record is written to
+data/rejects.jsonl with the reason, so nothing disappears silently.
+"""
+
+from __future__ import annotations
+
+import csv
+import io
+import json
+import re
+from dataclasses import dataclass, field
+from datetime import date, datetime, timezone
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, ValidationError, field_validator
+from sqlalchemy.orm import Session
+
+from . import config
+from .dedupe import (
+    find_company,
+    find_exact_prospect,
+    find_near_duplicate,
+    name_key,
+    normalize_domain,
+)
+from .models import STATUSES, Activity, Company, DupeReview, ImportBatch, Prospect, ResearchRequest
+
+SCHEMA_VERSION = 1
+
+# Fields an exact duplicate may fill in when the existing value is empty.
+ENRICHABLE_FIELDS = ("title", "phone", "email", "linkedin_url", "region", "city", "icp_score", "icp_rationale")
+
+
+class CompanyIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    domain: str | None = Field(default=None, max_length=255)
+    website: str | None = Field(default=None, max_length=2048)
+    industry: str | None = Field(default=None, max_length=160)
+    size_band: str | None = Field(default=None, max_length=80)
+    region: str | None = Field(default=None, max_length=160)
+
+
+class EvidenceLink(BaseModel):
+    url: str = Field(min_length=10, max_length=2048)
+    note: str | None = Field(default=None, max_length=300)
+
+    @field_validator("url")
+    @classmethod
+    def must_be_http(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("evidence url must start with http:// or https://")
+        return value
+
+
+class ProfileLink(BaseModel):
+    label: str = Field(min_length=1, max_length=40)
+    url: str = Field(min_length=10, max_length=2048)
+
+    @field_validator("url")
+    @classmethod
+    def must_be_http(cls, value: str) -> str:
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("profile url must start with http:// or https://")
+        return value
+
+
+def _apply_photo(prospect: Prospect, photo_url: str | None) -> bool:
+    """Download a public headshot once if the prospect has none yet."""
+    if not photo_url or prospect.photo_path:
+        return False
+    from . import photos
+
+    saved = photos.download_photo(photo_url, prospect.id)
+    if not saved:
+        return False
+    prospect.photo_path = saved
+    return True
+
+
+class ProspectRecord(BaseModel):
+    """One prospect as deposited by the research agent (or a CSV row).
+
+    `prospect_id` marks an enrichment record: it targets that existing
+    prospect directly instead of being matched by company + name.
+    """
+
+    prospect_id: int | None = Field(default=None, ge=1)
+    company: CompanyIn
+    full_name: str = Field(min_length=2, max_length=255)
+    title: str | None = Field(default=None, max_length=255)
+    phone: str | None = Field(default=None, max_length=80)
+    email: str | None = Field(default=None, max_length=320)
+    linkedin_url: str | None = Field(default=None, max_length=2048)
+    region: str | None = Field(default=None, max_length=160)
+    city: str | None = Field(default=None, max_length=160)
+    # Public image URL; ingest downloads a local copy into data/photos/.
+    photo_url: str | None = Field(default=None, max_length=2048)
+    profiles: list[ProfileLink] = Field(default_factory=list, max_length=8)
+    icp_score: int | None = Field(default=None, ge=0, le=100)
+    icp_rationale: str | None = Field(default=None, max_length=500)
+    evidence: list[EvidenceLink] = Field(default_factory=list, max_length=12)
+    notes: str | None = Field(default=None, max_length=4000)
+    status: str = "new"
+    priority: int = Field(default=2, ge=1, le=3)
+    next_followup_on: date | None = None
+
+    @field_validator("email")
+    @classmethod
+    def email_shape(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", value):
+            raise ValueError("email does not look like an address")
+        return value
+
+    @field_validator("status")
+    @classmethod
+    def known_status(cls, value: str) -> str:
+        if value not in STATUSES:
+            raise ValueError(f"unknown status {value!r}; expected one of {', '.join(STATUSES)}")
+        return value
+
+    @field_validator("phone", "title", "region", "city", "icp_rationale", "notes", "full_name")
+    @classmethod
+    def strip_blank(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return value.strip() or None
+
+    @field_validator("photo_url")
+    @classmethod
+    def photo_must_be_http(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        value = value.strip()
+        if not value.startswith(("http://", "https://")):
+            raise ValueError("photo_url must start with http:// or https://")
+        return value
+
+
+class DepositFile(BaseModel):
+    """Versioned envelope the research agent writes into inbox/.
+
+    This strict model is the published contract (schemas/*.json is generated
+    from it). Ingestion itself uses DepositEnvelope below so that one bad
+    record rejects that record, not the whole batch.
+    """
+
+    schema_version: Literal[1, 2, 3]
+    source: str = Field(default="codex", max_length=16)
+    batch_note: str | None = Field(default=None, max_length=1000)
+    request_id: int | None = Field(default=None, ge=1)
+    shortfall_reasons: list[str] = Field(default_factory=list, max_length=30)
+    prospects: list[ProspectRecord] = Field(min_length=1, max_length=500)
+
+
+class DepositEnvelope(BaseModel):
+    """Lenient envelope: records stay raw so they can fail individually."""
+
+    schema_version: Literal[1, 2, 3]
+    source: str = Field(default="codex", max_length=16)
+    batch_note: str | None = Field(default=None, max_length=1000)
+    request_id: int | None = Field(default=None, ge=1)
+    shortfall_reasons: list[str] = Field(default_factory=list, max_length=30)
+    prospects: list[dict[str, Any]] = Field(min_length=1, max_length=500)
+
+
+@dataclass
+class IngestSummary:
+    filename: str
+    source: str
+    created: int = 0
+    enriched: int = 0
+    duplicates: int = 0
+    review: int = 0
+    rejected: int = 0
+    batch_id: int | None = None
+    messages: list[str] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return self.created + self.enriched + self.duplicates + self.review + self.rejected
+
+    def one_line(self) -> str:
+        return (
+            f"{self.total} records: {self.created} created, {self.enriched} enriched, "
+            f"{self.duplicates} duplicates skipped, {self.review} parked for duplicate review, "
+            f"{self.rejected} rejected"
+        )
+
+
+def _reject(summary: IngestSummary, raw: Any, reason: str) -> None:
+    summary.rejected += 1
+    summary.messages.append(f"REJECTED: {reason}")
+    config.ensure_dirs()
+    entry = {
+        "rejected_at": datetime.now(timezone.utc).isoformat(),
+        "file": summary.filename,
+        "reason": reason,
+        "record": raw,
+    }
+    with config.REJECTS_PATH.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(entry, default=str) + "\n")
+
+
+def _get_or_create_company(session: Session, data: CompanyIn) -> Company:
+    domain = normalize_domain(data.domain or data.website)
+    company = find_company(session, domain=domain, name=data.name)
+    if company:
+        # Fill anything the existing row is missing.
+        for attr, value in (
+            ("domain", domain), ("website", data.website), ("industry", data.industry),
+            ("size_band", data.size_band), ("region", data.region),
+        ):
+            if value and not getattr(company, attr):
+                setattr(company, attr, value)
+        return company
+    website = data.website or (f"https://{domain}" if domain else None)
+    company = Company(
+        name=data.name.strip(), domain=domain, website=website,
+        industry=data.industry, size_band=data.size_band, region=data.region,
+    )
+    session.add(company)
+    session.flush()
+    return company
+
+
+def _enrich(session: Session, existing: Prospect, record: ProspectRecord) -> bool:
+    filled: list[str] = []
+    for attr in ENRICHABLE_FIELDS:
+        incoming = getattr(record, attr)
+        if incoming not in (None, "") and getattr(existing, attr) in (None, ""):
+            setattr(existing, attr, incoming)
+            filled.append(attr)
+    known_urls = {link.get("url", "").rstrip("/") for link in existing.evidence}
+    new_links = [
+        {"url": link.url, "note": link.note}
+        for link in record.evidence
+        if link.url.rstrip("/") not in known_urls
+    ]
+    if new_links and len(existing.evidence) < 12:
+        existing.evidence = existing.evidence + new_links[: 12 - len(existing.evidence)]
+        filled.append("evidence")
+
+    known_profiles = {link.get("url", "").rstrip("/") for link in existing.profiles}
+    new_profiles = [
+        {"label": link.label, "url": link.url}
+        for link in record.profiles
+        if link.url.rstrip("/") not in known_profiles
+    ]
+    if new_profiles and len(existing.profiles) < 8:
+        existing.profiles = existing.profiles + new_profiles[: 8 - len(existing.profiles)]
+        filled.append("profiles")
+
+    if _apply_photo(existing, record.photo_url):
+        filled.append("photo")
+
+    # Rapport intel: never overwrite the human's notes — append to the log.
+    if record.notes:
+        if not existing.notes:
+            existing.notes = record.notes
+            filled.append("notes")
+        elif record.notes.strip() not in existing.notes:
+            session.add(Activity(
+                prospect_id=existing.id, kind="note", body=f"[research] {record.notes}",
+            ))
+            filled.append("research note")
+
+    if filled:
+        session.add(Activity(
+            prospect_id=existing.id, kind="system",
+            body=f"Enriched from import: {', '.join(filled)}",
+        ))
+    return bool(filled)
+
+
+def ingest_records(
+    session: Session,
+    records: list[dict[str, Any]],
+    *,
+    filename: str,
+    source: str,
+    request_id: int | None = None,
+) -> IngestSummary:
+    """Run every raw record through validate -> dedupe -> persist."""
+    summary = IngestSummary(filename=filename, source=source)
+    batch = ImportBatch(filename=filename, source=source, request_id=request_id)
+    session.add(batch)
+    session.flush()
+
+    for index, raw in enumerate(records, start=1):
+        try:
+            record = ProspectRecord.model_validate(raw)
+        except ValidationError as exc:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
+            )
+            _reject(summary, raw, f"record {index}: {problems}")
+            continue
+
+        # Enrichment record: targets a specific existing prospect by id.
+        if record.prospect_id is not None:
+            target = session.get(Prospect, record.prospect_id)
+            if target is None:
+                _reject(summary, raw,
+                        f"record {index}: prospect_id {record.prospect_id} does not exist in the CRM")
+                continue
+            if _enrich(session, target, record):
+                summary.enriched += 1
+            else:
+                summary.duplicates += 1
+            continue
+
+        company = _get_or_create_company(session, record.company)
+
+        exact = find_exact_prospect(session, company.id, record.full_name)
+        if exact:
+            if _enrich(session, exact, record):
+                summary.enriched += 1
+            else:
+                summary.duplicates += 1
+            continue
+
+        near = find_near_duplicate(
+            session,
+            company_id=company.id,
+            full_name=record.full_name,
+            email=record.email,
+            phone=record.phone,
+            linkedin_url=record.linkedin_url,
+        )
+        if near:
+            existing, reason = near
+            session.add(DupeReview(
+                batch_id=batch.id,
+                payload=record.model_dump(mode="json"),
+                existing_prospect_id=existing.id,
+                reason=reason,
+            ))
+            summary.review += 1
+            continue
+
+        prospect = Prospect(
+            company_id=company.id,
+            full_name=record.full_name,
+            name_key=name_key(record.full_name),
+            title=record.title,
+            phone=record.phone,
+            email=record.email,
+            linkedin_url=record.linkedin_url,
+            region=record.region or company.region,
+            city=record.city,
+            profiles=[link.model_dump() for link in record.profiles],
+            icp_score=record.icp_score,
+            icp_rationale=record.icp_rationale,
+            evidence=[link.model_dump() for link in record.evidence],
+            status=record.status,
+            priority=record.priority,
+            notes=record.notes,
+            source=source,
+            next_followup_on=record.next_followup_on,
+        )
+        session.add(prospect)
+        session.flush()
+        if _apply_photo(prospect, record.photo_url):
+            session.add(Activity(
+                prospect_id=prospect.id, kind="system",
+                body="Saved prospect photo from import",
+            ))
+        session.add(Activity(prospect_id=prospect.id, kind="system", body=f"Added via {source} import ({filename})"))
+        summary.created += 1
+
+    batch.created_count = summary.created
+    batch.enriched_count = summary.enriched
+    batch.duplicate_count = summary.duplicates
+    batch.review_count = summary.review
+    batch.rejected_count = summary.rejected
+    summary.batch_id = batch.id
+    return summary
+
+
+def ingest_deposit_json(session: Session, content: str, *, filename: str) -> IngestSummary:
+    """Validate a deposit file (the envelope) and ingest its records."""
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        summary = IngestSummary(filename=filename, source="codex")
+        _reject(summary, content[:2000], f"not valid JSON: {exc}")
+        return summary
+    try:
+        deposit = DepositEnvelope.model_validate(parsed)
+    except ValidationError as exc:
+        summary = IngestSummary(filename=filename, source="codex")
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()[:5]
+        )
+        _reject(summary, parsed, f"deposit envelope invalid: {problems}")
+        return summary
+    request = session.get(ResearchRequest, deposit.request_id) if deposit.request_id else None
+    summary = ingest_records(
+        session,
+        deposit.prospects,
+        filename=filename,
+        source=deposit.source if deposit.source in ("codex", "csv", "manual", "enricher") else "codex",
+        request_id=request.id if request else None,
+    )
+    if deposit.request_id and not request:
+        summary.messages.append(f"note: request_id {deposit.request_id} does not exist; batch not linked")
+    if request and deposit.shortfall_reasons:
+        merged = list(request.shortfall)
+        for reason in deposit.shortfall_reasons:
+            if reason not in merged:
+                merged.append(reason)
+        request.shortfall = merged[:30]
+    return summary
+
+
+def resolve_dupe(session: Session, review: DupeReview, resolution: str) -> str:
+    """Apply a human decision to a parked near-duplicate. Returns a message."""
+    if review.status != "pending":
+        return "Already resolved."
+    record = ProspectRecord.model_validate(review.payload)
+    if resolution == "merged":
+        existing = session.get(Prospect, review.existing_prospect_id)
+        if existing is None:
+            review.status, review.resolution = "resolved", "discarded"
+            return "The existing prospect is gone; incoming record discarded."
+        changed = _enrich(session, existing, record)
+        review.status, review.resolution = "resolved", "merged"
+        return "Merged into the existing prospect." + ("" if changed else " (nothing new to add)")
+    if resolution == "kept_both":
+        company = _get_or_create_company(session, record.company)
+        if find_exact_prospect(session, company.id, record.full_name):
+            review.status, review.resolution = "resolved", "discarded"
+            return "An identical prospect already exists; nothing created."
+        prospect = Prospect(
+            company_id=company.id,
+            full_name=record.full_name,
+            name_key=name_key(record.full_name),
+            title=record.title, phone=record.phone, email=record.email,
+            linkedin_url=record.linkedin_url,
+            region=record.region or company.region,
+            icp_score=record.icp_score, icp_rationale=record.icp_rationale,
+            evidence=[link.model_dump() for link in record.evidence],
+            status=record.status, priority=record.priority, notes=record.notes,
+            source="codex",
+        )
+        session.add(prospect)
+        session.flush()
+        session.add(Activity(prospect_id=prospect.id, kind="system",
+                             body="Created from duplicate review (kept both)"))
+        review.status, review.resolution = "resolved", "kept_both"
+        return f"Created {record.full_name} as a separate prospect."
+    if resolution == "discarded":
+        review.status, review.resolution = "resolved", "discarded"
+        return "Incoming record discarded."
+    raise ValueError(f"Unknown resolution {resolution!r}")
+
+
+CSV_COLUMNS = [
+    "company", "company_domain", "full_name", "title", "phone", "email",
+    "linkedin_url", "region", "industry", "size_band", "icp_score",
+    "icp_rationale", "status", "priority", "notes", "next_followup_on",
+    "evidence_urls",
+]
+
+
+def csv_row_to_record(row: dict[str, str]) -> dict[str, Any]:
+    def clean(key: str) -> str | None:
+        return (row.get(key) or "").strip() or None
+
+    evidence = [
+        {"url": url.strip()}
+        for url in (row.get("evidence_urls") or "").split("|")
+        if url.strip()
+    ]
+    record: dict[str, Any] = {
+        "company": {
+            "name": clean("company") or clean("company_domain") or "",
+            "domain": clean("company_domain"),
+            "industry": clean("industry"),
+            "size_band": clean("size_band"),
+            "region": clean("region"),
+        },
+        "full_name": clean("full_name") or "",
+        "title": clean("title"),
+        "phone": clean("phone"),
+        "email": clean("email"),
+        "linkedin_url": clean("linkedin_url"),
+        "region": clean("region"),
+        "icp_rationale": clean("icp_rationale"),
+        "notes": clean("notes"),
+        "evidence": evidence,
+    }
+    if clean("icp_score"):
+        record["icp_score"] = clean("icp_score")
+    if clean("status"):
+        record["status"] = clean("status")
+    if clean("priority"):
+        record["priority"] = clean("priority")
+    if clean("next_followup_on"):
+        record["next_followup_on"] = clean("next_followup_on")
+    return record
+
+
+def ingest_csv(session: Session, content: bytes, *, filename: str) -> IngestSummary:
+    text = content.decode("utf-8-sig", errors="replace")
+    reader = csv.DictReader(io.StringIO(text))
+    records = [csv_row_to_record(row) for row in reader]
+    return ingest_records(session, records, filename=filename, source="csv")
+
+
+def dry_run_deposit(session: Session, content: str) -> list[tuple[int, str, str]]:
+    """Predict what an import would do, writing nothing anywhere.
+
+    Returns (record_number, outcome, detail) per record, where outcome is
+    one of: create, enrich-or-duplicate, review, invalid — plus a single
+    (0, 'envelope-invalid', reason) row if the file itself is broken.
+    Built for the research agent to self-check before depositing.
+    """
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError as exc:
+        return [(0, "envelope-invalid", f"not valid JSON: {exc}")]
+    try:
+        deposit = DepositEnvelope.model_validate(parsed)
+    except ValidationError as exc:
+        problems = "; ".join(
+            f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()[:5]
+        )
+        return [(0, "envelope-invalid", problems)]
+
+    results: list[tuple[int, str, str]] = []
+    if deposit.request_id and not session.get(ResearchRequest, deposit.request_id):
+        results.append((0, "warning", f"request_id {deposit.request_id} does not exist in the CRM"))
+    for index, raw in enumerate(deposit.prospects, start=1):
+        try:
+            record = ProspectRecord.model_validate(raw)
+        except ValidationError as exc:
+            problems = "; ".join(
+                f"{'.'.join(str(p) for p in err['loc'])}: {err['msg']}" for err in exc.errors()
+            )
+            results.append((index, "invalid", problems))
+            continue
+        if record.prospect_id is not None:
+            target = session.get(Prospect, record.prospect_id)
+            if target is None:
+                results.append((index, "invalid",
+                                f"prospect_id {record.prospect_id} does not exist in the CRM"))
+            else:
+                results.append((index, "enrich", f"would deepen {target.full_name} (#{target.id})"))
+            continue
+        domain = normalize_domain(record.company.domain or record.company.website)
+        company = find_company(session, domain=domain, name=record.company.name)
+        if company and find_exact_prospect(session, company.id, record.full_name):
+            results.append((index, "enrich-or-duplicate",
+                            f"{record.full_name} already exists at {company.name}"))
+            continue
+        near = find_near_duplicate(
+            session,
+            company_id=company.id if company else None,
+            full_name=record.full_name,
+            email=record.email,
+            phone=record.phone,
+            linkedin_url=record.linkedin_url,
+        )
+        if near:
+            results.append((index, "review", f"near-duplicate: {near[1]}"))
+            continue
+        results.append((index, "create", f"{record.full_name} @ {record.company.name}"))
+    return results

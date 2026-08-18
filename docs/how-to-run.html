@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prospecting CRM — From GitHub link to first call</title>
+  <style>
+    :root {
+      --ink: #14241c;
+      --muted: #5a6b62;
+      --line: #d5e0d9;
+      --paper: #f7faf7;
+      --card: #ffffff;
+      --accent: #2f6b4f;
+      --accent-soft: #e4f2ea;
+      --warn: #8a5a12;
+      --warn-soft: #f8efd8;
+      --live: #1b6b3a;
+      --code: #0f1f18;
+      --radius: 14px;
+      --shadow: 0 12px 40px rgba(20, 36, 28, 0.08);
+      --font: "Segoe UI", "Candara", "Gill Sans", sans-serif;
+      --mono: "Cascadia Mono", "Consolas", "Courier New", monospace;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: var(--font);
+      line-height: 1.5;
+      background:
+        radial-gradient(1200px 500px at 10% -10%, #dff0e6 0%, transparent 55%),
+        radial-gradient(900px 400px at 100% 0%, #eef5f0 0%, transparent 50%),
+        linear-gradient(180deg, #eef5f0 0%, var(--paper) 28%, var(--paper) 100%);
+      min-height: 100vh;
+    }
+    .wrap {
+      width: min(920px, calc(100% - 2rem));
+      margin: 0 auto;
+      padding: 2.5rem 0 4rem;
+    }
+    .eyebrow {
+      display: inline-block;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 0.6rem;
+    }
+    h1 {
+      font-size: clamp(1.9rem, 4vw, 2.6rem);
+      line-height: 1.15;
+      margin: 0 0 0.75rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 1.2rem;
+      margin: 2.2rem 0 0.85rem;
+    }
+    .lede {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 40rem;
+      margin: 0;
+    }
+    .need {
+      display: grid;
+      gap: 0.75rem;
+      margin: 1.5rem 0 0;
+      animation: rise 0.55s ease both;
+    }
+    @media (min-width: 700px) {
+      .need { grid-template-columns: 1fr 1fr 1fr; }
+    }
+    .need article {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1rem 1.1rem;
+      box-shadow: var(--shadow);
+    }
+    .need h3 { margin: 0 0 0.35rem; font-size: 0.98rem; }
+    .need p { margin: 0; color: var(--muted); font-size: 0.9rem; }
+
+    ol.steps {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      counter-reset: step;
+      display: grid;
+      gap: 0.85rem;
+    }
+    ol.steps > li {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 1.1rem 1.2rem;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 0.9rem;
+      box-shadow: var(--shadow);
+      animation: rise 0.55s ease both;
+    }
+    ol.steps > li:nth-child(1) { animation-delay: 0.05s; }
+    ol.steps > li:nth-child(2) { animation-delay: 0.1s; }
+    ol.steps > li:nth-child(3) { animation-delay: 0.15s; }
+    ol.steps > li:nth-child(4) { animation-delay: 0.2s; }
+    ol.steps > li:nth-child(5) { animation-delay: 0.25s; }
+    ol.steps > li:nth-child(6) { animation-delay: 0.3s; }
+    ol.steps > li::before {
+      counter-increment: step;
+      content: counter(step);
+      width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--accent);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      margin-top: 0.1rem;
+    }
+    ol.steps h3 { margin: 0 0 0.35rem; font-size: 1.05rem; }
+    ol.steps p { margin: 0; color: var(--muted); font-size: 0.95rem; }
+    .cmd {
+      display: block;
+      margin-top: 0.65rem;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      background: var(--code);
+      color: #d7ebe0;
+      border-radius: 8px;
+      padding: 0.65rem 0.8rem;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+    code, .mono {
+      font-family: var(--mono);
+      font-size: 0.86em;
+      background: var(--accent-soft);
+      color: var(--live);
+      padding: 0.1em 0.35em;
+      border-radius: 5px;
+    }
+    .map {
+      display: grid;
+      gap: 1rem;
+      margin-top: 0.5rem;
+    }
+    @media (min-width: 720px) {
+      .map { grid-template-columns: 1fr 1fr; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 1.25rem 1.35rem;
+    }
+    .panel h3 { margin: 0 0 0.75rem; font-size: 1.02rem; }
+    .tag {
+      display: inline-block;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0.28rem 0.55rem;
+      border-radius: 999px;
+      margin-bottom: 0.65rem;
+    }
+    .tag-live { background: var(--accent-soft); color: var(--live); }
+    .tag-code { background: #e8eef8; color: #2a4a7a; }
+    .path-block {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      background: var(--code);
+      color: #d7ebe0;
+      border-radius: 10px;
+      padding: 0.95rem 1rem;
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.55;
+    }
+    .path-block .hi { color: #9BE07A; font-weight: 600; }
+    .path-block .dim { color: #7f9a8c; }
+    .two {
+      display: grid;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    @media (min-width: 720px) {
+      .two { grid-template-columns: 1fr 1fr; }
+    }
+    .callout {
+      border-radius: var(--radius);
+      padding: 1.1rem 1.2rem;
+      border: 1px solid var(--line);
+    }
+    .callout h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+    .callout p { margin: 0; color: var(--muted); font-size: 0.92rem; }
+    .callout-warn { background: var(--warn-soft); border-color: #e6d3a4; }
+    .callout-warn h3 { color: var(--warn); }
+    .callout-ok { background: var(--accent-soft); border-color: #c5dfd0; }
+    .callout-ok h3 { color: var(--live); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.75rem;
+      background: var(--card);
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow);
+    }
+    th, td {
+      text-align: left;
+      padding: 0.85rem 1rem;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      font-size: 0.92rem;
+    }
+    th {
+      background: #f0f6f2;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+    }
+    tr:last-child td { border-bottom: 0; }
+    td.mono-cell {
+      font-family: var(--mono);
+      font-size: 0.78rem;
+      color: var(--live);
+      word-break: break-all;
+    }
+    footer {
+      margin-top: 2.25rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+    @keyframes rise {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="eyebrow">Prospecting CRM</div>
+    <h1>From the GitHub link to your first call list</h1>
+    <p class="lede">
+      You got a link to the repo. Here is exactly what you need, what to click,
+      and where your data is saved — on <strong>your</strong> computer only.
+    </p>
+
+    <h2>What you need first</h2>
+    <div class="need">
+      <article>
+        <h3>1. A Windows PC</h3>
+        <p>This guide is for Windows. Mac/Linux work too with the Python commands in the README.</p>
+      </article>
+      <article>
+        <h3>2. Python 3.11+</h3>
+        <p>Install from <span class="mono">python.org</span>. Check <strong>Add python.exe to PATH</strong>.</p>
+      </article>
+      <article>
+        <h3>3. The project folder</h3>
+        <p>Download the ZIP from GitHub, or clone with Git. Unzip somewhere easy to find.</p>
+      </article>
+    </div>
+
+    <h2>First-time journey</h2>
+    <ol class="steps">
+      <li>
+        <div>
+          <h3>Open the GitHub repo</h3>
+          <p>Go to <span class="mono">https://github.com/gusaga/prospects</span>.
+            Click the green <strong>Code</strong> button → <strong>Download ZIP</strong>
+            (or clone if you use Git).</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Unzip the folder</h3>
+          <p>Extract it (e.g. to <span class="mono">Documents\prospects</span>).
+            You should see files like <span class="mono">setup.bat</span>,
+            <span class="mono">README.md</span>, and a <span class="mono">crm</span> folder.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Run setup once</h3>
+          <p>Double-click <span class="mono">setup.bat</span>. It checks Python,
+            creates <span class="mono">.venv</span>, and installs the app.
+            When asked, you can start the CRM immediately.</p>
+          <span class="cmd">setup.bat</span>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Open the app</h3>
+          <p>If setup didn’t start it: double-click <span class="mono">run.bat</span>.
+            Your browser should open <span class="mono">http://127.0.0.1:8765</span>.</p>
+          <span class="cmd">run.bat</span>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Tell it who you sell to (ICP)</h3>
+          <p>Go to <strong>Settings</strong>. Fill product, industry, regions, titles,
+            and account rule — or click <strong>Load example ICP</strong> and edit it.
+            Without this, research briefs don’t know who to find.</p>
+        </div>
+      </li>
+      <li>
+        <div>
+          <h3>Start researching</h3>
+          <p>Open <strong>Research</strong>, create a request, copy the brief into your
+            AI research agent — or add prospects by hand. Use <strong>Today</strong>
+            when you’re ready to dial.</p>
+        </div>
+      </li>
+    </ol>
+
+    <h2>Where things are saved</h2>
+    <div class="map">
+      <div class="panel">
+        <span class="tag tag-code">This GitHub folder</span>
+        <h3>Application only</h3>
+        <div class="path-block"><span class="dim">…\prospects\</span>
+├── setup.bat
+├── run-live.bat
+├── crm\
+└── schemas\</div>
+        <p style="margin:0.8rem 0 0;color:var(--muted);font-size:0.9rem;">
+          Code and instructions. No calling list lives here.
+        </p>
+      </div>
+      <div class="panel">
+        <span class="tag tag-live">Your lists</span>
+        <h3>Data in Documents</h3>
+        <div class="path-block"><span class="dim">Documents\</span><span class="hi">ProspectingCRM\</span>
+├── data\crm.db
+├── inbox\
+└── backups\
+
+<span class="dim">…\prospects\</span><span class="hi">run-live.bat</span></div>
+        <p style="margin:0.8rem 0 0;color:var(--muted);font-size:0.9rem;">
+          Keeps your calling list safe when you update code from GitHub.
+        </p>
+      </div>
+    </div>
+
+    <div class="two" style="margin-top:1.25rem;">
+      <div class="callout callout-ok">
+        <h3>Move to a safe data home</h3>
+        <p>After setup, double-click <span class="mono">run-live.bat</span> once.
+          It opens a picker for folders under <span class="mono">Documents\ProspectingCRM*</span>
+          (never overwrites an existing database) and starts the one you choose.</p>
+      </div>
+      <div class="callout callout-warn">
+        <h3>Second business = second folder</h3>
+        <p>Don’t mix lists. On the picker, use <strong>Start a new list</strong>
+          (e.g. name it Dental → <span class="mono">Documents\ProspectingCRM-Dental</span>).
+          Each folder is a separate calling list.</p>
+      </div>
+    </div>
+
+    <h2>Cheat sheet</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Goal</th>
+          <th>What to do</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>I just downloaded the ZIP</td>
+          <td>Install Python → double-click <span class="mono">setup.bat</span> → fill Settings</td>
+        </tr>
+        <tr>
+          <td>Start tomorrow</td>
+          <td>Double-click <span class="mono">run-live.bat</span> and pick a list</td>
+        </tr>
+        <tr>
+          <td>Update from GitHub</td>
+          <td>Pull / re-download code; keep using the same <span class="mono">CRM_HOME</span> data</td>
+        </tr>
+        <tr>
+          <td>See which DB is open</td>
+          <td>Settings page shows the full path to <span class="mono">crm.db</span></td>
+        </tr>
+        <tr>
+          <td>Ask Cursor “run prospects”</td>
+          <td>The agent should start the list picker (not a database inside GitHub)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <footer>
+      File: <span class="mono">docs/how-to-run.html</span> ·
+      Also see <span class="mono">README.md</span>.
+      Nothing here requires Docker.
+    </footer>
+  </div>
+</body>
+</html>

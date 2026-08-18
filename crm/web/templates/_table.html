@@ -1,0 +1,58 @@
+{% import "_macros.html" as m %}
+<div class="table-wrap">
+<table class="data">
+  <thead>
+    <tr>
+      <th class="select-col" title="Select for enrichment">
+        <input type="checkbox" id="select-page" aria-label="Select all on this page"
+               {% if not prospects %}disabled{% endif %}>
+      </th>
+      <th>{{ m.sort_link('name', 'Who', f) }}</th>
+      <th>{{ m.sort_link('company', 'Company', f) }}</th>
+      <th>City</th>
+      <th>Phone</th>
+      <th>Email</th>
+      <th>{{ m.sort_link('score', 'Score', f) }}</th>
+      <th>{{ m.sort_link('priority', 'Priority', f) }}</th>
+      <th>{{ m.sort_link('status', 'Status', f) }}</th>
+      <th>{{ m.sort_link('followup', 'Follow-up', f) }}</th>
+      <th>{{ m.sort_link('added', 'Added', f) }}</th>
+    </tr>
+  </thead>
+  <tbody data-count="{{ count }}">
+  {% for p in prospects %}
+    <tr class="rowlink" data-href="/prospects/{{ p.id }}">
+      <td class="select-col" onclick="event.stopPropagation()">
+        {% if p.status not in CLOSED_STATUSES %}
+        <input type="checkbox" class="enrich-pick" value="{{ p.id }}"
+               data-name="{{ p.full_name }}"
+               aria-label="Select {{ p.full_name }} for enrichment">
+        {% else %}
+        <span class="muted" title="Closed — cannot enrich">–</span>
+        {% endif %}
+      </td>
+      <td>
+        <div class="who-cell">
+          {{ m.enrich_mark(p, enriched_ids) }}
+          <div>
+            <a class="plain" href="/prospects/{{ p.id }}"><strong>{{ p.full_name }}</strong></a><br>
+            <span class="muted small">{{ p.title or '' }}</span>
+          </div>
+        </div>
+      </td>
+      <td>{{ p.company.name }}<br><span class="muted small">{{ p | region_of }}</span></td>
+      <td>{% if p.city %}<span class="small">{{ p.city }}</span>{% else %}<span class="muted small">–</span>{% endif %}</td>
+      <td>{{ m.phone_cell(p) }}</td>
+      <td>{{ m.email_cell(p) }}</td>
+      <td>{{ m.score_badge(p) }}</td>
+      <td>{{ m.priority_chip(p) }}</td>
+      <td>{{ m.status_pill(p) }}</td>
+      <td>{% if p.next_followup_on %}<span class="due {{ p.next_followup_on | due_class }}">{{ p.next_followup_on | due_label }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+      <td><span class="muted small">{{ p.created_at | fmt_date }}</span></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="11" class="empty-cell">No prospects match. <a href="/prospects">Clear filters</a> or <a href="/import">import research</a>.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div>
